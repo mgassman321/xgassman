@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-TM08TEJRJE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-TM08TEJRJE');
+</script>
+<link rel="icon" type="image/png" href="/favicons/langton.png">
+<link rel="apple-touch-icon" href="/favicons/langton-touch.png">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Langton’s Ant · xgassman</title>
+<meta name="description" content="Two rules, endless surprises. Watch Langton's Ant turn chaos into a highway, with custom grids and up to four ants.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="xgassman">
+<meta property="og:title" content="Langton’s Ant">
+<meta property="og:description" content="Two rules, endless surprises. Watch Langton's Ant turn chaos into a highway, with custom grids and up to four ants.">
+<meta property="og:url" content="https://xgassman.com/langtons-ant">
+<meta property="og:image" content="https://xgassman.com/og/langton.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root { --bg:#0b0b10; --cell:#b9a6ff; --ant:#ff6a3d; --fg:#eee; --dim:#8a8aa0; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; min-height:100%; background:var(--bg); color:var(--fg);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  body { display:flex; flex-direction:column; align-items:center; }
+  header { text-align:center; padding:18px 12px 6px; }
+  h1 { margin:0; font-size:20px; letter-spacing:.04em; }
+  .sub { color:var(--dim); font-size:12px; margin-top:4px; }
+  .setup { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:10px; }
+  select { font:inherit; font-size:14px; background:#1b1b2b; color:var(--fg); border:1px solid #2e2e48;
+    padding:8px 10px; border-radius:8px; }
+  #wrap { position:relative; width:min(94vw, 560px); aspect-ratio:1; margin:10px 0;
+    border:1px solid #23233a; border-radius:10px; overflow:hidden; cursor:pointer; touch-action:manipulation; }
+  canvas { width:100%; height:100%; display:block; }
+  #overlay { position:absolute; inset:0; display:flex; flex-direction:column; gap:10px;
+    align-items:center; justify-content:center; background:rgba(11,11,16,.72); transition:opacity .3s; }
+  #overlay.hide { opacity:0; pointer-events:none; }
+  #overlay .big { font-size:26px; font-weight:700; }
+  #overlay .small { color:var(--dim); font-size:13px; max-width:80%; text-align:center; line-height:1.5; }
+  #hint { position:absolute; left:0; right:0; top:8px; text-align:center; font-size:12px; color:var(--dim);
+    pointer-events:none; }
+  .pulse { animation:p 1.4s ease-in-out infinite; }
+  @keyframes p { 50% { opacity:.45; } }
+  #stats { display:flex; gap:18px; font-size:14px; }
+  #stats b { color:var(--cell); }
+  #phase { min-height:22px; font-size:14px; margin-top:6px; color:var(--dim); transition:color .4s; text-align:center; padding:0 12px; }
+  #phase.hw { color:var(--ant); font-weight:700; }
+  .controls { display:flex; gap:10px; align-items:center; margin:12px 0 24px; flex-wrap:wrap; justify-content:center; }
+  button { font:inherit; font-size:14px; background:#1b1b2b; color:var(--fg); border:1px solid #2e2e48;
+    padding:9px 16px; border-radius:8px; }
+  button:active { background:#2a2a44; }
+  button.go { background:#3a2c6e; border-color:#5a46a8; }
+  button[hidden] { display:none; }
+  label { font-size:13px; color:var(--dim); display:flex; align-items:center; gap:8px; }
+  input[type=range] { width:120px; accent-color:var(--cell); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Langton's Ant</h1>
+  <div class="sub">Two rules. Dark square: turn right. Lit square: turn left.</div>
+  <div class="setup">
+    <select id="pattern" aria-label="Starting grid">
+      <option value="empty">Empty grid (classic)</option>
+      <option value="random">Random scatter</option>
+      <option value="square">Solid square</option>
+      <option value="line">Horizontal line</option>
+      <option value="checker">Checkerboard</option>
+      <option value="ring">Hollow box</option>
+      <option value="draw">Draw your own</option>
+    </select>
+    <select id="ants" aria-label="Number of ants">
+      <option value="1">1 ant</option>
+      <option value="2">2 ants</option>
+      <option value="3">3 ants</option>
+      <option value="4">4 ants</option>
+    </select>
+  </div>
+</header>
+
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div id="hint"></div>
+  <div id="overlay">
+    <div class="big pulse">Tap to start</div>
+    <div class="small" id="ovsmall"></div>
+  </div>
+</div>
+
+<div id="stats"><span>step <b id="step">0</b></span><span>lit <b id="lit">0</b></span></div>
+<div id="phase">&nbsp;</div>
+
+<div class="controls">
+  <button id="start" class="go" hidden>Start</button>
+  <button id="pause">Pause</button>
+  <button id="reset">Reset</button>
+  <button id="shuffle" hidden>New random</button>
+  <label>speed <input id="speed" type="range" min="1" max="200" value="40"></label>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const canvas = $('c'), ctx = canvas.getContext('2d'), wrap = $('wrap');
+const overlay = $('overlay'), ovsmall = $('ovsmall'), hint = $('hint');
+const stepEl = $('step'), litEl = $('lit'), phaseEl = $('phase');
+const pauseBtn = $('pause'), startBtn = $('start'), shuffleBtn = $('shuffle');
+const speedEl = $('speed'), patternEl = $('pattern'), antsEl = $('ants');
+
+const ANT_COLORS = ['#ff6a3d', '#3dd6ff', '#7dff6a', '#ffd23d'];
+let lit, ants, step, minX, maxX, minY, maxY, running = false, started = false;
+let view = { s: 1, ox: 0, oy: 0 };
+
+const key = (x, y) => x + ',' + y;
+function light(x, y) { lit.add(key(x, y)); grow(x, y); }
+function grow(x, y) {
+  if (x < minX) minX = x; if (x > maxX) maxX = x;
+  if (y < minY) minY = y; if (y > maxY) maxY = y;
+}
+
+function placeAnts(n) {
+  // start positions spread out a bit, each facing a different way
+  const spots = {
+    1: [[0, 0, 0, -1]],
+    2: [[-5, 0, 0, -1], [5, 0, 0, 1]],
+    3: [[0, -5, 0, -1], [-5, 4, -1, 0], [5, 4, 1, 0]],
+    4: [[-5, -5, 0, -1], [5, -5, 1, 0], [5, 5, 0, 1], [-5, 5, -1, 0]],
+  }[n];
+  return spots.map(([x, y, dx, dy]) => ({ x, y, dx, dy }));
+}
+
+function buildPattern(p) {
+  const R = 8;
+  if (p === 'random') {
+    for (let x = -R; x <= R; x++) for (let y = -R; y <= R; y++)
+      if (Math.random() < 0.45) light(x, y);
+  } else if (p === 'square') {
+    for (let x = -4; x <= 4; x++) for (let y = -4; y <= 4; y++) light(x, y);
+  } else if (p === 'line') {
+    for (let x = -12; x <= 12; x++) light(x, 2);
+  } else if (p === 'checker') {
+    for (let x = -R; x <= R; x++) for (let y = -R; y <= R; y++)
+      if ((x + y) % 2 === 0) light(x, y);
+  } else if (p === 'ring') {
+    for (let i = -7; i <= 7; i++) { light(i, -7); light(i, 7); light(-7, i); light(7, i); }
+  }
+}
+
+const DESCRIPTIONS = {
+  empty: 'The classic: about 10,000 steps of chaos, then a "highway."',
+  random: 'A random patch of lit squares. It usually still finds a highway, just later.',
+  square: 'A solid lit block for the ant to chew through.',
+  line: 'A long lit line across the ant’s path.',
+  checker: 'A checkerboard patch. Watch how differently it unravels.',
+  ring: 'A hollow box around the ant. Can it escape?',
+};
+
+function reset() {
+  lit = new Set(); step = 0;
+  minX = -10; maxX = 10; minY = -10; maxY = 10;
+  const p = patternEl.value, n = +antsEl.value;
+  ants = placeAnts(n);
+  ants.forEach(a => grow(a.x, a.y));
+  buildPattern(p);
+  started = false; setRunning(false); pauseBtn.textContent = 'Pause';
+  const drawing = p === 'draw';
+  overlay.classList.toggle('hide', drawing);
+  startBtn.hidden = !drawing;
+  shuffleBtn.hidden = p !== 'random';
+  hint.textContent = drawing ? 'Tap squares to light them, then press Start' : '';
+  ovsmall.textContent = drawing ? '' :
+    (DESCRIPTIONS[p] + (n > 1 ? ` With ${n} ants sharing one grid, they interfere with each other.` : ''));
+  phaseEl.textContent = ' '; phaseEl.className = '';
+  stepEl.textContent = '0'; litEl.textContent = lit.size.toLocaleString();
+  draw();
+}
+
+// Same rules as the Python version, run for every ant
+function tick() {
+  for (const a of ants) {
+    const k = key(a.x, a.y);
+    if (lit.has(k)) { [a.dx, a.dy] = [a.dy, -a.dx]; lit.delete(k); }  // lit: turn left
+    else            { [a.dx, a.dy] = [-a.dy, a.dx]; lit.add(k); }     // dark: turn right
+    a.x += a.dx; a.y += a.dy;
+    grow(a.x, a.y);
+  }
+  step++;
+}
+
+function resize() {
+  const r = wrap.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  canvas.width = r.width * d; canvas.height = r.height * d;
+  draw();
+}
+
+function draw() {
+  const W = canvas.width, H = canvas.height;
+  ctx.fillStyle = '#0b0b10'; ctx.fillRect(0, 0, W, H);
+  const pad = 3;
+  const spanX = maxX - minX + 1 + pad * 2, spanY = maxY - minY + 1 + pad * 2;
+  const s = Math.min(W / spanX, H / spanY);
+  const ox = (W - spanX * s) / 2 - (minX - pad) * s;
+  const oy = (H - spanY * s) / 2 - (minY - pad) * s;
+  view = { s, ox, oy };
+  const g = s > 3 ? Math.max(1, s * 0.08) : 0;
+
+  // faint grid while drawing
+  if (patternEl.value === 'draw' && !started) {
+    ctx.strokeStyle = '#1c1c2c'; ctx.lineWidth = 1;
+    for (let i = minX - pad; i <= maxX + pad + 1; i++) {
+      ctx.beginPath(); ctx.moveTo(ox + i * s, 0); ctx.lineTo(ox + i * s, H); ctx.stroke();
+    }
+    for (let j = minY - pad; j <= maxY + pad + 1; j++) {
+      ctx.beginPath(); ctx.moveTo(0, oy + j * s); ctx.lineTo(W, oy + j * s); ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle = '#b9a6ff';
+  for (const k of lit) {
+    const i = k.indexOf(',');
+    const cx = +k.slice(0, i), cy = +k.slice(i + 1);
+    ctx.fillRect(ox + cx * s + g / 2, oy + cy * s + g / 2, s - g, s - g);
+  }
+  const r = Math.max(s * 0.7, 4 * (window.devicePixelRatio || 1));
+  ants.forEach((a, i) => {
+    ctx.fillStyle = ANT_COLORS[i];
+    ctx.beginPath(); ctx.arc(ox + (a.x + .5) * s, oy + (a.y + .5) * s, r, 0, Math.PI * 2); ctx.fill();
+  });
+}
+
+function updatePhase() {
+  const classic = patternEl.value === 'empty' && ants.length === 1;
+  if (!classic) { phaseEl.textContent = 'running… will a highway appear?'; phaseEl.className = ''; return; }
+  if (step < 500) { phaseEl.textContent = 'simple, symmetric patterns…'; phaseEl.className = ''; }
+  else if (step < 10000) { phaseEl.textContent = 'chaos…'; phaseEl.className = ''; }
+  else { phaseEl.textContent = 'the highway emerges!'; phaseEl.className = 'hw'; }
+}
+
+function loop() {
+  if (running) {
+    const n = +speedEl.value;
+    for (let i = 0; i < n; i++) tick();
+    stepEl.textContent = step.toLocaleString();
+    litEl.textContent = lit.size.toLocaleString();
+    updatePhase();
+    draw();
+  }
+  requestAnimationFrame(loop);
+}
+
+function setRunning(v) { running = v; pauseBtn.textContent = v ? 'Pause' : 'Resume'; }
+
+function begin() {
+  started = true; overlay.classList.add('hide');
+  startBtn.hidden = true; hint.textContent = '';
+  setRunning(true);
+}
+
+wrap.addEventListener('click', e => {
+  if (!started && patternEl.value === 'draw') {
+    // toggle the tapped square
+    const r = canvas.getBoundingClientRect(), d = canvas.width / r.width;
+    const cx = Math.floor(((e.clientX - r.left) * d - view.ox) / view.s);
+    const cy = Math.floor(((e.clientY - r.top) * d - view.oy) / view.s);
+    const k = key(cx, cy);
+    if (lit.has(k)) lit.delete(k); else lit.add(k);
+    litEl.textContent = lit.size.toLocaleString();
+    draw();
+    return;
+  }
+  if (!started) begin(); else setRunning(!running);
+});
+startBtn.addEventListener('click', begin);
+pauseBtn.addEventListener('click', () => { if (started) setRunning(!running); });
+$('reset').addEventListener('click', reset);
+shuffleBtn.addEventListener('click', reset);
+patternEl.addEventListener('change', reset);
+antsEl.addEventListener('change', reset);
+
+window.addEventListener('resize', resize);
+reset(); resize(); requestAnimationFrame(loop);
+</script>
+<!-- xgassman back link -->
+<a id="xg-back" href="/" title="More projects at xgassman.com">← xgassman<span style="color:#6f8259">.</span></a>
+<style>
+#xg-back{all:initial;position:fixed!important;left:12px;bottom:12px;z-index:2147483000!important;
+  font:500 12px/1 Arial,Helvetica,sans-serif;letter-spacing:-.2px;color:#eeeeea;cursor:pointer;
+  background:rgba(25,26,24,.78);padding:7px 11px;border-radius:999px;
+  box-shadow:0 1px 4px rgba(0,0,0,.35);opacity:.8;transition:opacity .15s}
+#xg-back:hover,#xg-back:focus-visible{opacity:1}
+#xg-back:focus-visible{outline:2px solid #6f8259;outline-offset:2px}
+@media print{#xg-back{display:none}}
+</style>
+</body>
+</html>

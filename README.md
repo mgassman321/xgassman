@@ -34,6 +34,16 @@ A Chicago street-food drop game. Inspired by the 1995 freeware Mac game [Slick W
 
 A pixel-art downhill skiing game inspired by [SkiFree](https://en.wikipedia.org/wiki/SkiFree), the 1991 Windows classic made by Chris Pirih. Pick Free Ski, Slalom or Freestyle, jump, pull tricks in the air, rack up style points, and watch out after 1500 m...
 
+### Cake Land
+`cake-land/`
+
+A top-down, 16-bit style adventure starring Pancake, an anthropomorphic pancake with a bubble wand. Explore the village, fish the Syrup River, trade for hats that change your shots, befriend the Leafy pets, and face Mr. Thunderman.
+
+### Langton's Ant
+`langtons-ant.html`
+
+A simulation with two rules: on a dark square turn right, on a lit square turn left. Watch about 10,000 steps of chaos turn into a "highway", or try custom grids and up to four ants.
+
 Everything is plain HTML, CSS and JavaScript: no build step, no dependencies.
 
 ## Folder layout
@@ -41,6 +51,7 @@ Everything is plain HTML, CSS and JavaScript: no build step, no dependencies.
 ```
 index.html      the gallery page
 *.html          one file per project
+cake-land/      Cake Land (game page plus its fonts and sprite art)
 images/         artwork for Superpets
 icons/          gallery tile icons (source copies; index.html has them built in)
 favicons/       browser-tab and home-screen icons for each page

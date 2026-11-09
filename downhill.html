@@ -186,6 +186,7 @@ addEventListener('keydown', e => {
   if (keys[k]) return; keys[k] = true;
   if (phase === 'title') { if (k==='1') begin('free'); if (k==='2') begin('slalom'); if (k==='3') begin('freestyle'); if (k==='enter') begin('free'); return; }
   if (phase === 'over') { if (k==='enter' || k===' ') { phase = 'title'; } return; }
+  if (phase === 'paused' && (k==='q' || k==='m')) { phase = 'title'; return; }
   if (k==='p' || k==='escape') { phase = phase==='paused' ? 'play' : phase==='play' ? 'paused' : phase; return; }
   if (phase !== 'play') return;
   mouse.on = false;
@@ -207,19 +208,20 @@ addEventListener('blur', () => { if (phase==='play') phase='paused'; for (const 
 
 function ptr(e){ const t = e.touches ? e.touches[0] : e; return {x:t.clientX/Z, y:t.clientY/Z}; }
 cv.addEventListener('mousemove', e => { const p = ptr(e); mouse.x=p.x; mouse.y=p.y; if (phase==='play') mouse.on = true; });
+cv.addEventListener('mouseleave', () => { mouse.on = false; });
 cv.addEventListener('touchmove', e => { const p = ptr(e); mouse.x=p.x; mouse.y=p.y; mouse.on = true; e.preventDefault(); }, {passive:false});
 cv.addEventListener('pointerdown', e => {
   const p = {x:e.clientX/Z, y:e.clientY/Z};
   if (phase === 'title') { for (const b of menuBtns) if (p.x>b.x && p.x<b.x+b.w && p.y>b.y && p.y<b.y+b.h) begin(b.m); return; }
   if (phase === 'over') { phase = 'title'; return; }
-  if (phase === 'paused') { phase = 'play'; return; }
+  if (phase === 'paused') { for (const b of pauseBtns) if (p.x>b.x && p.x<b.x+b.w && p.y>b.y && p.y<b.y+b.h) phase = b.go; return; }
   if (phase === 'play' && !P.crash && !P.hidden) {
     if (P.air > 0) { if (!P.trick) { P.trick = ['s_flip','s_twist','s_spread','s_cross'][(Math.random()*4)|0]; P.trickT = 0.42; } }
     else if (e.pointerType === 'mouse' || mouse.on) jump(0.55);
     mouse.x = p.x; mouse.y = p.y; mouse.on = true;
   }
 });
-function begin(m){ reset(m); phase = 'play'; }
+function begin(m){ reset(m); phase = 'play'; mouse.on = false; }
 
 // ---------- helpers ----------
 function addFloat(txt, col, x, y){ floats.push({txt, col, x: x ?? P.x, y: (y ?? P.y) - 60, t:1.1}); }
@@ -275,14 +277,14 @@ function update(dt){
     P.y += P.speed*dt; P.speed = Math.max(0, P.speed - 600*dt);
     if (P.crashT <= 0) { P.crash = null; P.grace = 0.9; if (P.speed < 10) P.dir = 0; }
   } else {
-    const a = P.dir * Math.PI/6, max = P.fast ? FASTV : MAXV;
-    const factor = [0, 0.55, 0.85, 1, 0.85, 0.55, 0][P.dir+3];
+    const a = [-90, -53, -30, 0, 30, 53, 90][P.dir+3] * Math.PI/180, max = P.fast ? FASTV : MAXV;
+    const factor = [0, 0.83, 0.924, 1, 0.924, 0.83, 0][P.dir+3];
     let target = max * factor;
     const braking = (keys['arrowup'] || keys['w']) && P.air <= 0;
     if (braking) target = 0;
     if (P.air > 0) target = P.speed;
     if (P.iceT > 0) { target = P.speed; P.x += Math.sin(timeT*9) * 28 * dt; }
-    const acc = target > P.speed ? (P.fast ? 380 : 260) : 520;
+    const acc = target > P.speed ? (P.fast ? 440 : 320) : (braking || Math.abs(P.dir) === 3 ? 520 : 200);
     P.speed += Math.sign(target - P.speed) * Math.min(Math.abs(target - P.speed), acc*dt);
     P.x += Math.sin(a) * P.speed * dt; P.y += Math.cos(a) * P.speed * dt;
     // walking when stopped
@@ -558,7 +560,7 @@ function draw(){
   drawHUD();
   if (toast && phase === 'play') drawPanel('panel_blue', VW/2, VH*0.72, toast.lines, 0.9);
   if (phase === 'title') drawTitle();
-  if (phase === 'paused') drawPanel('panel_blue', VW/2, VH/2, ['PAUSED', '', 'Press P or click to resume']);
+  if (phase === 'paused') drawPause();
   if (phase === 'over') drawOver();
 }
 
@@ -646,6 +648,7 @@ function drawHUD(){
   if (P.fast) hudText('FAST', x + 116, y + im.height + 10, 11, C.red);
   const m = {free:'FREE SKI', slalom:'SLALOM', freestyle:'FREESTYLE'}[mode];
   hudText(m, x + im.width/2, y + im.height + (P.fast ? 24 : 10), 11, C.blue);
+  hudText('Esc: pause / menu', x + im.width/2, y + im.height + (P.fast ? 38 : 24), 10, C.gray);
 }
 
 function drawPanel(n, cx, cy, lines, alpha){
@@ -655,6 +658,22 @@ function drawPanel(n, cx, cy, lines, alpha){
   lines.forEach((l, i) => hudText(l, cx, top + i*lh, i === 0 ? 16 : 13, i === 0 ? (n === 'panel_red' ? C.maroon : C.blue) : C.navy));
 }
 
+let pauseBtns = [];
+function drawPause(){
+  ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(0, 0, VW, VH);
+  const im = IMG.panel_blue, px = Math.round(VW/2 - im.width/2), py = Math.round(VH/2 - im.height/2);
+  ctx.drawImage(im, px, py);
+  hudText('PAUSED', VW/2, py + 24, 16, C.blue);
+  pauseBtns = [];
+  [['Resume  (P / Esc)', 'play'], ['Main menu  (Q)', 'title']].forEach((o, i) => {
+    const bx = px + 60, bw = im.width - 120, bh = 24, by = py + 48 + i*32;
+    const hov = mouse.x > bx && mouse.x < bx+bw && mouse.y > by && mouse.y < by+bh;
+    ctx.fillStyle = hov ? C.navy : C.white; ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = C.navy; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+    hudText(o[0], VW/2, by + bh/2 + 1, 13, hov ? C.yellow : C.navy);
+    pauseBtns.push({x:bx, y:by, w:bw, h:bh, go:o[1]});
+  });
+}
 let menuBtns = [];
 function drawTitle(){
   const logo = IMG.logo, s = Math.min(1, (VW - 40)/logo.width);
