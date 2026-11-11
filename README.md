@@ -77,11 +77,24 @@ git push
 
 Changes appear on xgassman.com about a minute after pushing.
 
+## Automatic page checks
+
+`site.json` lists every game: its file, address, name, description, favicon and preview card. `tools/xg_prepare.py` uses it to make sure each game page has the Google tag, favicon, "Name · xgassman" title, link-preview tags and the "← xgassman." back link. If a new version of a game is saved under an old file name (like `hotdog_drop.html`), it moves the new version to the real file and puts the redirect back.
+
+A git hook runs this automatically on every `git commit`, so updated games can be dropped in as-is. To run it by hand:
+
+```
+python3 tools/xg_prepare.py           # fix anything missing
+python3 tools/xg_prepare.py --check   # only report
+```
+
+The hook lives in `.git/hooks/`, which isn't pushed to GitHub. On a fresh copy of the repo, reinstall it with `cp tools/pre-commit .git/hooks/pre-commit`.
+
 ## Adding a project
 
 1. Put the new `.html` file in this folder.
 2. In `index.html`, copy one of the `<li>` tiles in the grid, then change the link, name and class.
 3. Add a matching color line in the "Tile colors" CSS block.
-4. Add a favicon by copying the two `<link rel="icon">` lines from another project page.
+4. Add the game to `site.json` (file, address, name, description, icon, card). The commit hook then adds its Google tag, favicon, title, preview tags and back link.
 
 To preview locally, open `index.html` in a browser, or run `python3 -m http.server` here and visit http://localhost:8000.

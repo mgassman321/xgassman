@@ -1,0 +1,83 @@
+{
+  "google_tag": "G-TM08TEJRJE",
+  "site": "https://xgassman.com",
+  "pages": [
+    {
+      "file": "superpets.html",
+      "url": "superpets",
+      "name": "Sawyer’s Skateboarding Superpets",
+      "description": "A pixel-art skateboarding game made for my daughter and her pets. Flappy Bird meets endless cartoon hallways, plus a double jump.",
+      "icon": "superpets",
+      "card": "superpets"
+    },
+    {
+      "file": "hot-dog-dropper.html",
+      "url": "hot-dog-dropper",
+      "name": "Da Chicago Pope Hot Dog Dropper Game",
+      "description": "A Chicago street-food drop game, inspired by the 1995 Mac freeware game Slick Willie 2.0.",
+      "icon": "pope",
+      "card": "pope"
+    },
+    {
+      "file": "cake-land/index.html",
+      "url": "cake-land/",
+      "name": "Cake Land",
+      "description": "A top-down, 16-bit style adventure starring Pancake and his bubble wand. Explore the village, fish the Syrup River, collect hats and face Mr. Thunderman.",
+      "icon": "cakeland",
+      "card": "cakeland"
+    },
+    {
+      "file": "dice.html",
+      "url": "dice",
+      "name": "Dice",
+      "description": "A dice roller for when you don’t have the right dice on hand, with Classic, Vegas and Disco themes.",
+      "icon": "dice",
+      "card": "dice"
+    },
+    {
+      "file": "downhill.html",
+      "url": "downhill",
+      "name": "Downhill",
+      "description": "A pixel-art downhill skiing game: free ski, slalom and freestyle runs, with jumps, tricks and big air. Watch out after 1500 m...",
+      "icon": "downhill",
+      "card": "downhill"
+    },
+    {
+      "file": "spectrum-studio.html",
+      "url": "spectrum-studio",
+      "name": "Spectrum Studio",
+      "description": "Turn on your mic for a music-driven visualizer with presets and custom looks, inspired by late-’90s Winamp plugins.",
+      "icon": "spectrum",
+      "card": "spectrum"
+    },
+    {
+      "file": "idea-board.html",
+      "url": "idea-board",
+      "name": "Idea Board",
+      "description": "My own take on Stickies: a corkboard of checklists, photos and links that saves in your browser.",
+      "icon": "stickies",
+      "card": "stickies"
+    },
+    {
+      "file": "langtons-ant.html",
+      "url": "langtons-ant",
+      "name": "Langton’s Ant",
+      "description": "Two rules, endless surprises. Watch Langton's Ant turn chaos into a highway, with custom grids and up to four ants.",
+      "icon": "langton",
+      "card": "langton"
+    }
+  ],
+  "redirects": {
+    "spectrum-studio_1.html": "spectrum-studio",
+    "hotdog_drop.html": "hot-dog-dropper",
+    "stickies.html": "idea-board",
+    "soy_game_4.html": "superpets",
+    "dice_simulator_2.html": "dice"
+  },
+  "ignore": [
+    "index.html",
+    "404.html",
+    "privacy.html",
+    "notes.html"
+  ]
+}

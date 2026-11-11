@@ -1,0 +1,34 @@
+#!/bin/sh
+# xgassman.com: before each commit, add any missing Google tag, favicon,
+# title, preview card or back link to the game pages (see tools/xg_prepare.py).
+cd "$(git rev-parse --show-toplevel)" || exit 0
+[ -f tools/xg_prepare.py ] || exit 0
+command -v python3 >/dev/null 2>&1 || { echo "xgassman: python3 not found, skipping page check"; exit 0; }
+
+staged=$(git diff --cached --name-only)
+changed=$(python3 tools/xg_prepare.py --hook) || exit 1
+
+# Re-stage the files the script fixed, but only ones you were already committing
+# (plus both halves of a "saved under the old name" fix).
+for f in $changed; do
+  case "
+$staged
+" in
+    *"
+$f
+"*) git add -- "$f" ;;
+  esac
+done
+# If an old-name file was staged and the script moved its content, stage the real page too.
+python3 - "$staged" $changed <<'EOF'
+import json, subprocess, sys
+staged = set(sys.argv[1].split())
+changed = sys.argv[2:]
+cfg = json.load(open('site.json', encoding='utf-8'))
+by_url = {p['url']: p['file'] for p in cfg['pages']}
+for old, url in cfg.get('redirects', {}).items():
+    page = by_url.get(url)
+    if old in changed and page in changed and (old in staged or page in staged):
+        subprocess.run(['git', 'add', '--', old, page])
+EOF
+exit 0
