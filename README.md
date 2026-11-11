@@ -34,6 +34,11 @@ A Chicago street-food drop game. Inspired by the 1995 freeware Mac game [Slick W
 
 A pixel-art downhill skiing game inspired by [SkiFree](https://en.wikipedia.org/wiki/SkiFree), the 1991 Windows classic made by Chris Pirih. Pick Free Ski, Slalom or Freestyle, jump, pull tricks in the air, rack up style points, and watch out after 1500 m...
 
+### Wasteland
+`wasteland/`
+
+A top-down desert driving game. Hit the gas, drift and fire your guns down Route 66, blasting cacti, TNT, zombies and more, without getting blown to pieces or swallowed by the abyss.
+
 ### Cake Land
 `cake-land/`
 
@@ -52,6 +57,7 @@ Everything is plain HTML, CSS and JavaScript: no build step, no dependencies.
 index.html      the gallery page
 *.html          one file per project
 cake-land/      Cake Land (game page plus its fonts and sprite art)
+wasteland/      Wasteland (game page plus its sprite art)
 images/         artwork for Superpets
 icons/          gallery tile icons (source copies; index.html has them built in)
 favicons/       browser-tab and home-screen icons for each page

@@ -1,0 +1,2264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-TM08TEJRJE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-TM08TEJRJE');
+</script>
+<link rel="icon" type="image/png" href="/favicons/wasteland.png">
+<link rel="apple-touch-icon" href="/favicons/wasteland-touch.png">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wasteland · xgassman</title>
+<meta name="description" content="A top-down desert driving game. Hit the gas, drift and fire your guns down Route 66, blasting cacti, TNT and zombies without getting blown to pieces or swallowed by the abyss.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="xgassman">
+<meta property="og:title" content="Wasteland">
+<meta property="og:description" content="A top-down desert driving game. Hit the gas, drift and fire your guns down Route 66, blasting cacti, TNT and zombies without getting blown to pieces or swallowed by the abyss.">
+<meta property="og:url" content="https://xgassman.com/wasteland/">
+<meta property="og:image" content="https://xgassman.com/og/wasteland.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  html, body { margin: 0; height: 100%; background: #fff; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+/* =====================================================================
+   WASTELAND — base driving prototype
+   ---------------------------------------------------------------------
+   Controls: W/↑ throttle · S/↓ brake/reverse · A/D or ←/→ steer
+             SHIFT handbrake (drift) · SPACE twin machine guns · R restart
+   ---------------------------------------------------------------------
+   ART HOOKS: put real sprites in ASSETS below (data: URIs or relative
+   paths when hosted with files). Anything that fails to load falls back
+   to the hand-drawn placeholder renderer.
+   ===================================================================== */
+
+const ASSETS = {
+  // car_sheet:   'assets/car_sheet_8dir.png',  // (off: using the 3D model)   // 1024x128, 8 frames: N,NE,E,SE,S,SW,W,NW (3/4 view)
+  // car_topdown: 'assets/car_topdown.png',      // 128x128 fallback, nose UP
+  cactus_0:    'assets/cactus_0.png',         // 128x192, base bottom-center
+  cactus_1:    'assets/cactus_1.png',
+  cactus_2:    'assets/cactus_2.png',
+  boulder_0:   'assets/boulder_0.png',        // 192x160, base bottom-center
+  boulder_1:   'assets/boulder_1.png',
+  boulder_2:   'assets/boulder_2.png',
+  pit_0:       'assets/pit_0.png',            // 384x384 top-down
+  fx_explode:  'assets/fx_cactus_explode.png',// 768x128, 6 frames
+  fx_muzzle:   'assets/fx_muzzle.png',        // 64x32, points right
+  fx_bullet:   'assets/fx_bullet.png',        // 32x8, points right
+  logo:        'assets/logo_script.png',             // 1200x400
+  ufo:         'assets/ufo_crashed.png',      // 384x256 single
+  missile:     'assets/missile_sheet.png',    // 256x192, 2 variants of 128x192
+  jackalope:   'assets/jackalope_sheet.png',  // 384x64, 6 frames: sit, twitch, crouch, hop x3
+  coyote:      'assets/coyote_sheet.png',       // 768x64, 8 frames 96x64: stand, sniff, sit, howl, run x4
+  bigfoot:     'assets/bigfoot_sheet.png',    // 768x128, 8 frames 96x128: stand, scratch, walk x4, wave, flex
+  roadrunner:  'assets/roadrunner_sheet.png', // 512x64, 8 frames: stand, bob, tail flick, crouch, sprint x4
+  tumbleweed:  'assets/tumbleweed_sheet.png',
+  smithereens: 'assets/smithereens.png',      // game-over titles when you blow up (one picked at random)
+  word_boom: 'assets/word_boom.png', word_smoked: 'assets/word_smoked.png', word_ruhroh: 'assets/word_ruhroh.png',
+  sign_stop_0: 'assets/sign_stop_0.png', sign_stop_1: 'assets/sign_stop_1.png', sign_stop_2: 'assets/sign_stop_2.png',
+  sign_66_0: 'assets/sign_66_0.png', sign_66_1: 'assets/sign_66_1.png', sign_street: 'assets/sign_street.png',
+  sign_wood_0: 'assets/sign_wood_0.png', sign_wood_1: 'assets/sign_wood_1.png', sign_wood_2: 'assets/sign_wood_2.png',
+  sign_vegas: 'assets/sign_vegas.png',
+  eiffel_legs: 'assets/eiffel_legs.png',      // 1024x320, 4 legs: back-left, back-right, front-left, front-right
+  statue_0: 'assets/statue_diner.png', statue_1: 'assets/statue_diner_pterodactyl.png',   // 160x320 // 256x64, 4 roll frames
+  tnt:         'assets/tnt_crate.png',        // 96x96
+  fx_boom:     'assets/fx_explosion_big.png', // 1536x192, 8 frames
+  car_wreck:   'assets/car_wreck.png',        // 128x128, faces right
+  scorch:      'assets/scorch.png',           // 192x128 ground decal
+  mound_0:     'assets/mound_0.png',          // 320x224 jump hill
+  crater_0:    'assets/crater_0.png',         // 256x192 small crater
+  crater_1:    'assets/crater_1.png',         // 384x256 medium
+  crater_2:    'assets/crater_2.png',         // 512x352 large
+  airstream:   'assets/airstream.png',        // 512x384 homestead compound
+  pylon_0:     'assets/pylon_0.png',          // 192x384 standing tower
+  pylon_1:     'assets/pylon_1.png',          // 256x320 half collapsed
+  pylon_2:     'assets/pylon_2.png',          // 384x224 collapsed
+  road_0:      'assets/road_0.png',           // 256x512 road tile, intact
+  road_1:      'assets/road_1.png',           // 256x512 road tile, buried
+  carcass_0:   'assets/carcass_0.png',        // 192x128 rusted car bodies
+  carcass_1:   'assets/carcass_1.png',
+  carcass_2:   'assets/carcass_2.png',
+  scrap_gibs:  'assets/scrap_gibs.png',       // 256x32, 8 pieces
+  mound_1:     'assets/mound_1.png',          // lower, wider variant (hills now replaced by pyramids)
+  pyramid_0:   'assets/pyramid_0.png',        // 384x288 step-pyramid base tier
+  pyramid_1:   'assets/pyramid_1.png',        // ruined variant
+  // --- NPCs (uncomment as the art arrives) ---
+  zombie:       'assets/zombie_sheet.png',   // 512x96, 8 frames 64x96: idle x2, walk x4, lunge x2
+  alien:        'assets/alien_sheet.png',    // 512x96, 8 frames 64x96: idle x2, run x4, hiss x2
+  buffalo:      'assets/buffalo_sheet.png',  // 1024x96, 8 frames 128x96: idle x2, charge x6
+  zombie_gibs:  'assets/zombie_gibs.png',    // 256x32, 8 pieces 32x32
+  alien_gibs:   'assets/alien_gibs.png',
+  buffalo_gibs: 'assets/buffalo_gibs.png',
+  fx_gib:       'assets/fx_gib_burst.png',   // 768x128, 6 frames 128x128
+  splat:        'assets/splat.png',          // 192x128 ground decal
+};
+const IMG = {};
+// sprites that get a bold black silhouette outline so they pop off the sand (thickness in sprite pixels)
+// cacti: number = thickness (canvas grows to fit). Others: { t, fw } = slight border kept inside the
+// original canvas so draw code is unchanged; fw = frame width for sprite sheets (no bleed between frames).
+// t is in sprite pixels, chosen so each lands at roughly 1px on screen at its in-game scale.
+const OUTLINE = {
+  cactus_0: 2.2, cactus_1: 2.2, cactus_2: 2.2,
+  boulder_0: { t: 1.1 }, boulder_1: { t: 1.1 }, boulder_2: { t: 1.1 },
+  tnt: { t: 0.75 }, ufo: { t: 0.6 }, car_wreck: { t: 0.6 },
+  mound_0: { t: 0.7 }, mound_1: { t: 0.7 },
+  zombie: { t: 0.55, fw: 64 }, alien: { t: 0.55, fw: 64 }, buffalo: { t: 0.55, fw: 128 },
+  jackalope: { t: 0.55, fw: 64 }, coyote: { t: 0.55, fw: 96 }, bigfoot: { t: 0.55, fw: 96 }, roadrunner: { t: 0.55, fw: 64 },
+  airstream: { t: 0.5 },
+  pylon_0: { t: 0.5 }, pylon_1: { t: 0.5 }, pylon_2: { t: 0.5 },
+  sign_stop_0: { t: 0.9 }, sign_stop_1: { t: 0.9 }, sign_stop_2: { t: 0.9 }, sign_66_0: { t: 0.9 }, sign_66_1: { t: 0.9 },
+  sign_street: { t: 0.9 }, sign_wood_0: { t: 0.9 }, sign_wood_1: { t: 0.9 }, sign_wood_2: { t: 0.9 }, sign_vegas: { t: 0.8 }, eiffel_legs: { t: 0.6, fw: 256 }, statue_0: { t: 0.8 }, statue_1: { t: 0.8 },
+};
+// silhouette from the clearly-opaque pixels only, so faint background haze in a sprite never becomes a dark box
+function solidSilhouette(g, w, h) {
+  try {
+    const d = g.getImageData(0, 0, w, h), p = d.data;
+    for (let i = 0; i < p.length; i += 4) { const on = p[i + 3] > 110; p[i] = p[i + 1] = p[i + 2] = 20; p[i + 3] = on ? 255 : 0; }
+    g.putImageData(d, 0, 0);
+  } catch (e) {   // pixel access blocked (e.g. opened from disk): plain silhouette
+    g.globalCompositeOperation = 'source-in'; g.fillStyle = '#141414'; g.fillRect(0, 0, w, h); g.globalCompositeOperation = 'source-over';
+  }
+}
+function addOutlineInPlace(im, t, fw) {
+  const w = im.width, h = im.height;
+  const sil = document.createElement('canvas'); sil.width = w; sil.height = h;
+  const sg = sil.getContext('2d'); sg.drawImage(im, 0, 0);
+  solidSilhouette(sg, w, h);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const cell = fw || w;
+  for (let x0 = 0; x0 < w; x0 += cell) {
+    g.save(); g.beginPath(); g.rect(x0, 0, cell, h); g.clip();
+    for (let a = 0; a < 16; a++) g.drawImage(sil, Math.cos(a / 16 * 6.283) * t, Math.sin(a / 16 * 6.283) * t);
+    g.restore();
+  }
+  g.drawImage(im, 0, 0);
+  return c;
+}
+function addOutline(im, t) {
+  if (typeof t === 'object') return addOutlineInPlace(im, t.t, t.fw);
+  const pad = t + 1, w = im.width + pad * 2, h = im.height + pad * 2;
+  // solid black silhouette of the sprite
+  const sil = document.createElement('canvas'); sil.width = w; sil.height = h;
+  const sg = sil.getContext('2d'); sg.drawImage(im, pad, pad);
+  solidSilhouette(sg, w, h);
+  // stamp it in a ring to grow it, then put the original art on top
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  // one-sided: ink only on the right (shadow) side, matching the light from the upper left
+  for (let a = 0; a < 24; a++) {
+    const ang = a / 24 * 6.283, cx = Math.cos(ang), sy = Math.sin(ang);
+    if (cx < 0.3) continue;
+    for (const r of [t * 0.5, t]) g.drawImage(sil, cx * r, sy * r);
+  }
+  g.drawImage(im, pad, pad);
+  c.pad = pad; c.srcW = im.width; c.srcH = im.height;
+  return c;
+}
+for (const [k, src] of Object.entries(ASSETS)) {
+  const im = new Image();
+  im.onload = () => { IMG[k] = OUTLINE[k] ? addOutline(im, OUTLINE[k]) : im; };
+  im.src = src;
+}
+
+/* ---------- canvas ---------- */
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+}
+window.addEventListener('resize', resize); resize();
+
+/* ---------- palette & projection ---------- */
+const PAPER = '#ffffff';
+const INK = '#141414';
+const K = 0.78;           // 3/4 view: ground-plane vertical squash
+const CHUNK = 640;
+
+/* ---------- seeded random ---------- */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function hash2(x, y, s) {
+  let h = s ^ Math.imul(x, 374761393) ^ Math.imul(y, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+let WORLD_SEED = (Math.random() * 1e9) | 0;
+
+/* ---------- stipple patterns (darkness = dot density) ---------- */
+function makeStipple(density, size = 96, dotR = 0.9, seed = 7) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  const r = mulberry32(seed);
+  g.fillStyle = INK;
+  const n = Math.floor(size * size * density / 9);
+  for (let i = 0; i < n; i++) {
+    const x = r() * size, y = r() * size;
+    const rr = dotR * (0.6 + r() * 0.8);
+    g.beginPath(); g.arc(x, y, rr, 0, 6.283); g.fill();
+    // wrap edges so tile is seamless
+    if (x < 2) { g.beginPath(); g.arc(x + size, y, rr, 0, 6.283); g.fill(); }
+    if (y < 2) { g.beginPath(); g.arc(x, y + size, rr, 0, 6.283); g.fill(); }
+  }
+  return ctx.createPattern(c, 'repeat');
+}
+const ST = {
+  ground: makeStipple(0.025, 128, 0.8, 1),
+  light:  makeStipple(0.10, 96, 0.9, 2),
+  mid:    makeStipple(0.25, 96, 1.0, 3),
+  dark:   makeStipple(0.55, 96, 1.1, 4),
+  vdark:  makeStipple(1.1, 96, 1.2, 5),
+};
+
+// halftone for the car: an even dot grid (built at 3x so it stays crisp on retina screens)
+function makeHalftone(spacing, r) {
+  const R = 3, n = 4, size = Math.round(spacing * n * R);
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const g = c.getContext('2d'); g.fillStyle = INK;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const x = (i + (j % 2) * 0.5 + 0.25) * spacing * R, y = (j + 0.5) * spacing * R;
+    for (const dx of [0, size]) { g.beginPath(); g.arc((x + dx) % (size + 1), y, r * R, 0, 6.283); g.fill(); }
+    if (x - r * R < 0) { g.beginPath(); g.arc(x + size, y, r * R, 0, 6.283); g.fill(); }
+    if (x + r * R > size) { g.beginPath(); g.arc(x - size, y, r * R, 0, 6.283); g.fill(); }
+  }
+  const p = ctx.createPattern(c, 'repeat'); p.res = R; return p;
+}
+const HT = { light: makeHalftone(4, 0.55), mid: makeHalftone(3.2, 0.85), dark: makeHalftone(2.6, 1.05), vdark: makeHalftone(2.2, 1.15) };
+
+/* ---------- input ---------- */
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  if (state.mode === 'title' && (e.code === 'Space' || e.code === 'Enter')) startGame();
+  else if (state.mode === 'dead' && state.deadT > (state.death === 'boom' ? 1.6 : 0.8) && (e.code === 'KeyR' || e.code === 'Enter' || e.code === 'Space')) startGame();
+  else if (e.code === 'KeyR' && state.mode === 'play') startGame();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+const down = (...c) => c.some(k => keys[k]);
+
+/* ---------- world generation ---------- */
+const chunks = new Map();
+const destroyed = new Set();
+
+/* ---------- large landmarks: one per 1280px cell, kept fully inside the cell so they can never overlap ---------- */
+const BIG = 1280;
+const bigCache = new Map();
+function towerClash(x, y, rad) {
+  for (let i = Math.floor((x - rad - 300) / LINE_GAP); i <= Math.floor((x + rad + 300) / LINE_GAP); i++) {
+    if (!powerLine(i)) continue;
+    for (let k = Math.floor((y - rad) / TOWER_GAP) - 1; k <= Math.ceil((y + rad) / TOWER_GAP) + 1; k++) {
+      const T = tower(i, k);
+      if (Math.hypot(T.x - x, T.y - y) < rad + PYLON_ART.r[T.variant] + 40) return true;
+    }
+  }
+  return false;
+}
+function bigCell(bx, by) {
+  const key = bx + ',' + by;
+  if (bigCache.has(key)) return bigCache.get(key);
+  const r = mulberry32(hash2(bx, by, WORLD_SEED ^ 0x27d4eb2f));
+  const out = [], ox = bx * BIG, oy = by * BIG;
+  let n = 0;
+  const mk = (type, x, y, rad, extra = {}) => ({ type, x, y, r: rad, id: `B${bx},${by},${n++}`, seed: (r() * 1e9) | 0, variant: 0, ...extra });
+  const ok = (x, y, rad, spawn) => x - rad > ox + 40 && x + rad < ox + BIG - 40 && y - rad > oy + 40 && y + rad < oy + BIG - 40
+    && Math.hypot(x, y) > rad + spawn && !roadAt(x, y, Math.min(rad, 160) + 20) && !towerClash(x, y, rad);
+  // pick at most one landmark for this cell (weights match the old per-chunk rates)
+  const q = r();
+  let pick = null;
+  const table = [['eiffel', 0.008], ['vegas', 0.012], ['airstream', 0.024], ['crater', 0.14], ['pyramid', 0.128], ['ufo', 0.012], ['pit', 0.08]];
+  let acc = 0; for (const [t, p] of table) { acc += p; if (q < acc) { pick = t; break; } }
+  if (pick) for (let tries = 0; tries < 10; tries++) {
+    const x = ox + r() * BIG, y = oy + r() * BIG;
+    if (pick === 'eiffel') {
+      const E = EIFFEL.half + EIFFEL.legR;
+      if (ok(x, y, E + 40, 700)) {
+        [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy], i) => out.push(mk('leg', x + sx * EIFFEL.half, y + sy * EIFFEL.half, EIFFEL.legR, { variant: i })));
+        break;
+      }
+    }
+    else if (pick === 'vegas') { if (ok(x, y, 150, 700)) { out.push(mk('vegas', x, y, VEGAS.r)); break; } }
+    else if (pick === 'airstream') { const R = AIRSTREAM_ART.Ro; if (ok(x, y, R, 700)) { out.push(mk('airstream', x, y, R)); break; } }
+    else if (pick === 'crater') { const v = (() => { const k = r(); return k < 0.5 ? 0 : k < 0.85 ? 1 : 2; })(); const R = CRATER_ART[v].Ro; if (ok(x, y, R, 260)) { out.push(mk('crater', x, y, R, { variant: v })); break; } }
+    else if (pick === 'pyramid') { const sc = 0.85 + r() * 0.3, R = PYR.Bx * sc * 1.15; if (ok(x, y, R, 260)) { out.push(mk('mound', x, y, R, { sc, variant: (r() * 2) | 0 })); break; } }
+    else if (pick === 'ufo') { if (ok(x, y, 120, 260)) { out.push(mk('ufo', x, y, 78)); break; } }
+    else if (pick === 'pit') {
+      const pr = 60 + r() * 50;
+      if (!ok(x, y, pr, 600)) continue;
+      const pit = mk('pit', x, y, pr);
+      if (r() < 0.6) { const a = r() * 6.283; out.push(mk('sign', x + Math.cos(a) * (pr + 55), y + Math.sin(a) * (pr + 55), 10, { art: 'sign_wood_2' })); }
+      if (r() < 0.14) {            // sometimes a launch pyramid lined up with the abyss
+        const a = r() * 6.283, sc = 0.9 + r() * 0.25, R = PYR.Bx * sc * 1.15, d = pr + R + 90;
+        const mx = x + Math.cos(a) * d, my = y + Math.sin(a) * d;
+        if (!ok(mx, my, R, 260)) continue;
+        out.push(pit, mk('mound', mx, my, R, { sc, variant: (r() * 2) | 0 }));
+      } else out.push(pit);
+      break;
+    }
+  }
+  bigCache.set(key, out);
+  return out;
+}
+function bigNear(x0, y0, x1, y1) {
+  const out = [];
+  for (let by = Math.floor(y0 / BIG); by <= Math.floor(y1 / BIG); by++)
+    for (let bx = Math.floor(x0 / BIG); bx <= Math.floor(x1 / BIG); bx++) out.push(...bigCell(bx, by));
+  return out;
+}
+
+function genChunk(cx, cy) {
+  const r = mulberry32(hash2(cx, cy, WORLD_SEED));
+  const objs = [], dunes = [];
+  const ox = cx * CHUNK, oy = cy * CHUNK;
+  const nearSpawn = (x, y, m) => Math.hypot(x, y) < m;
+  // landmarks centred in this chunk belong to it; nearby ones (incl. other chunks) block small props
+  const bigs = bigNear(ox - 400, oy - 400, ox + CHUNK + 400, oy + CHUNK + 400);
+  for (const b of bigs) if (Math.floor(b.x / CHUNK) === cx && Math.floor(b.y / CHUNK) === cy) objs.push(b);
+  const free = (x, y, rad) => objs.every(o => Math.hypot(o.x - x, o.y - y) > o.r + rad + 30)
+                           && bigs.every(o => Math.hypot(o.x - x, o.y - y) > o.r + rad + 30);
+  let idn = 0;
+  const roads = roadsNear(ox + CHUNK / 2, oy + CHUNK / 2);
+  const add = (type, rad, extra = {}) => {
+    for (let t = 0; t < 8; t++) {
+      const x = ox + r() * CHUNK, y = oy + r() * CHUNK;
+      if (nearSpawn(x, y, type === 'pit' ? 600 : type === 'airstream' ? 700 : 260)) continue;
+      if (!free(x, y, rad)) continue;
+      if (roadAt(x, y, Math.min(rad, 120) + 20, roads)) continue;       // keep the old roads clear
+      const o = { type, x, y, r: rad, id: `${cx},${cy},${idn++}`, seed: (r() * 1e9) | 0, variant: (r() * 3) | 0, ...extra };
+      objs.push(o); return o;
+    }
+  };
+  // dunes: soft stipple blobs on the ground
+  const nd = 1 + ((r() * 3) | 0);
+  for (let i = 0; i < nd; i++) dunes.push({ x: ox + r() * CHUNK, y: oy + r() * CHUNK, rx: 120 + r() * 220, ry: 50 + r() * 90, a: r() * Math.PI, seed: (r() * 1e9) | 0 });
+  // power towers along the lines that cross this chunk (placed first so nothing spawns on them)
+  for (let i = Math.floor((ox - 300) / LINE_GAP); i <= Math.floor((ox + CHUNK + 300) / LINE_GAP); i++) {
+    if (!powerLine(i)) continue;
+    for (let k = Math.ceil(oy / TOWER_GAP); k * TOWER_GAP < oy + CHUNK; k++) {
+      const T = tower(i, k);
+      if (Math.floor(T.x / CHUNK) !== cx || Math.floor(T.y / CHUNK) !== cy) continue;
+      if (Math.hypot(T.x, T.y) < 300 || roadAt(T.x, T.y, 40, roads)) continue;
+      if (bigs.some(o => Math.hypot(o.x - T.x, o.y - T.y) < o.r + PYLON_ART.r[T.variant] + 20)) continue;
+      const id = `${cx},${cy},${idn++}`;
+      objs.push({ type: 'pylon', x: T.x, y: T.y, r: PYLON_ART.r[T.variant], id, seed: k, variant: T.variant });
+      if (T.variant === 2) for (const dx of [-120, 110])   // collapsed tower is long: extra solid sections
+        objs.push({ type: 'block', x: T.x + dx, y: T.y - 8, r: 48, id: `${cx},${cy},${idn++}`, seed: 0, variant: 0 });
+    }
+  }
+  // rusted car bodies
+  if (r() < 0.10) add('carcass', 31);
+  if (r() < 0.05) add('missile', 13, { variant: r() < 0.5 ? 0 : 1 }); // rare
+  if (r() < 0.08) {
+    const t = add('tnt', 22);
+    if (t && r() < 0.5) {           // "danger explosives" posted next to the crate
+      const a = r() * 6.283, x = t.x + Math.cos(a) * 60, y = t.y + Math.sin(a) * 60;
+      if (free(x, y, 10 - 25)) objs.push({ type: 'sign', x, y, r: 10, id: `${cx},${cy},${idn++}`, seed: 0, art: 'sign_wood_1' });
+    }
+  }
+  // signs along the old roads
+  for (const R of roads) for (let i = 20; i < R.pts.length - 20; i += 30) {
+    const p = R.pts[i];
+    if (Math.floor(p.x / CHUNK) !== cx || Math.floor(p.y / CHUNK) !== cy) continue;
+    if (r() < 0.006) {               // the occasional giant roadside mascot statue
+      const side = r() < 0.5 ? 1 : -1, off = ROAD_W / 2 + 60;
+      const x = p.x - Math.sin(p.h) * off * side, y = p.y + Math.cos(p.h) * off * side;
+      if (free(x, y, STATUE.r)) objs.push({ type: 'statue', x, y, r: STATUE.r, id: `${cx},${cy},${idn++}`, seed: 0, variant: (r() * 2) | 0 });
+      continue;
+    }
+    if (r() > 0.08) continue;
+    const side = r() < 0.5 ? 1 : -1, off = ROAD_W / 2 + 22;
+    const x = p.x - Math.sin(p.h) * off * side, y = p.y + Math.cos(p.h) * off * side;
+    const q = r(), art = q < 0.42 ? 'sign_stop_' + ((r() * 3) | 0) : q < 0.82 ? 'sign_66_' + ((r() * 2) | 0) : 'sign_street';
+    if (free(x, y, 10)) objs.push({ type: 'sign', x, y, r: 10, id: `${cx},${cy},${idn++}`, seed: 0, art });
+  }
+  // crossroads: stop signs on two corners, a street sign on another
+  for (const R of roads) {
+    const J = R.junction; if (!J || Math.floor(J.x / CHUNK) !== cx || Math.floor(J.y / CHUNK) !== cy) continue;
+    const o = ROAD_W / 2 + 26;
+    const corners = [[1, 1], [-1, -1], [1, -1], [-1, 1]].map(([u, v]) => [J.x + (Math.cos(J.h) * u + Math.cos(J.ch) * v) * o, J.y + (Math.sin(J.h) * u + Math.sin(J.ch) * v) * o]);
+    const arts = ['sign_stop_' + ((r() * 3) | 0), 'sign_stop_' + ((r() * 3) | 0), JUNCTION_SIGNS[(r() * JUNCTION_SIGNS.length) | 0], r() < 0.5 ? 'stoplight' : null];
+    corners.forEach(([x, y], k) => { if (arts[k] && (IMG[arts[k]] || arts[k].startsWith('sign_stop'))) objs.push({ type: 'sign', x, y, r: 10, id: `${cx},${cy},${idn++}`, seed: 0, art: arts[k] }); });
+  }
+  // the odd lonely sign out in the open
+  if (r() < 0.04) { const q = r(); add('sign', 10, { art: q < 0.5 ? 'sign_wood_0' : q < 0.8 ? 'sign_stop_' + ((r() * 3) | 0) : 'sign_street' }); }
+  // boulders, sometimes clustered
+  const nb = (r() * 3) | 0;
+  for (let i = 0; i < nb; i++) {
+    if (r() >= 0.05) continue;             // boulder density: 5% of original
+    const b = add('boulder', 22 + r() * 26);
+    if (b && r() < 0.35) {
+      for (let j = 0; j < 2; j++) {
+        const a = r() * 6.283, d = b.r + 30 + r() * 30;
+        const x = b.x + Math.cos(a) * d, y = b.y + Math.sin(a) * d, rad = 12 + r() * 14;
+        if (free(x, y, rad - 25)) objs.push({ type: 'boulder', x, y, r: rad, id: `${cx},${cy},${idn++}`, seed: (r() * 1e9) | 0, variant: (r() * 3) | 0 });
+      }
+    }
+  }
+  // cacti
+  const nc = (r() * 4) | 0;
+  for (let i = 0; i < nc; i++) { if (r() < 0.5) continue; add('cactus', 14, { h: 55 + r() * 45 }); }   // half density
+  // pebbles & scrub (decor only)
+  const decor = [];
+  const np = 10 + ((r() * 14) | 0);
+  for (let i = 0; i < np; i++) decor.push({ x: ox + r() * CHUNK, y: oy + r() * CHUNK, k: r() < 0.7 ? 'pebble' : 'scrub', s: 1 + r() * 2.5, seed: (r() * 1e9) | 0 });
+  return { objs, dunes, decor };
+}
+function getChunk(cx, cy) {
+  const key = cx + ',' + cy;
+  let c = chunks.get(key);
+  if (!c) { c = genChunk(cx, cy); chunks.set(key, c); }
+  return c;
+}
+function visibleChunks(x, y, pad = 1) {
+  const out = [];
+  const hw = W / 2 + 200, hh = H / (2 * K) + 260;
+  const x0 = Math.floor((x - hw) / CHUNK) - pad + 1, x1 = Math.floor((x + hw) / CHUNK) + pad - 1;
+  const y0 = Math.floor((y - hh) / CHUNK) - pad + 1, y1 = Math.floor((y + hh) / CHUNK) + pad - 1;
+  for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) out.push(getChunk(cx, cy));
+  // prune far chunks (destroyed set keeps cactus state if you come back)
+  if (chunks.size > 300) {
+    for (const [k] of chunks) {
+      const [a, b] = k.split(',').map(Number);
+      if (Math.abs(a * CHUNK - x) > CHUNK * 8 || Math.abs(b * CHUNK - y) > CHUNK * 8) chunks.delete(k);
+    }
+  }
+  return out;
+}
+function nearbyObjects(x, y) {
+  const cx = Math.floor(x / CHUNK), cy = Math.floor(y / CHUNK), out = [];
+  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++)
+    for (const o of getChunk(cx + i, cy + j).objs) if (!destroyed.has(o.id)) out.push(o);
+  return out;
+}
+
+/* craters: measured from the art (image px). outer footprint (cx, cy, rx, ry), rim crest (rx, cy, ry),
+   floor center y + radius. Ro = outer radius in the world; everything else is derived. */
+const CRATER_ART = [
+  { cx: 127, cy: 98,  rx: 102, ry: 83,  crestRx: 74,  crestCy: 84,  crestRy: 56,  floorY: 107, floorR: 33,  Ro: 120 },
+  { cx: 191, cy: 130, rx: 186, ry: 118, crestRx: 161, crestCy: 113, crestRy: 92,  floorY: 145, floorR: 80,  Ro: 230 },
+  { cx: 248, cy: 154, rx: 233, ry: 146, crestRx: 199, crestCy: 138, crestRy: 122, floorY: 190, floorR: 138, Ro: 340 },
+];
+for (const A of CRATER_ART) {
+  A.sx = A.Ro / A.rx; A.sy = A.Ro * K / A.ry;
+  A.Rr = A.crestRx * A.sx; A.Rf = A.floorR * A.sx;
+  A.Hr = (A.cy - A.crestCy) * A.sy;           // rim crest height
+  A.D = (A.floorY - A.cy) * A.sy;             // floor depth below ground
+}
+function craterHeight(A, d) {
+  if (d >= A.Ro) return 0;
+  if (d >= A.Rr) return A.Hr * (A.Ro - d) / (A.Ro - A.Rr);                  // outer slope up to the crest
+  if (d >= A.Rf) return -A.D + (A.Hr + A.D) * (d - A.Rf) / (A.Rr - A.Rf);   // inner wall
+  return -A.D;                                                              // flat floor
+}
+// Airstream fence ring: center + radii in the art; world radius
+const AIRSTREAM_ART = { cx: 386, cy: 272, rx: 372, ry: 205, Ro: 250 };   // fence ring in the art; uniform scale, oval footprint
+AIRSTREAM_ART.s = AIRSTREAM_ART.Ro / AIRSTREAM_ART.rx; AIRSTREAM_ART.Ry = AIRSTREAM_ART.ry * AIRSTREAM_ART.s / K;
+// power towers: base point in the art + wire attachment points relative to base (standing tower), draw scale
+const PYLON_ART = { scale: 1.15, base: [[88, 350], [95, 301], [190, 150]],
+  tips: [[-60, -238], [64, -232], [-58, -172], [62, -165]], r: [34, 42, 60] };
+
+/* ---------- power lines: endless lines running roughly north-south ---------- */
+const LINE_GAP = 2600, TOWER_GAP = 720;
+function powerLine(i) {           // null if column i has no line
+  const h = hash2(i, 9137, WORLD_SEED) / 4294967296;
+  if (h > 0.08) return null;          // ~8% of columns carry a power line
+  return { x: i * LINE_GAP + 300 + (hash2(i, 31, WORLD_SEED) / 4294967296) * 2000, ph: h * 50 };
+}
+function tower(i, k) {
+  const L = powerLine(i); if (!L) return null;
+  const v = hash2(i, k * 7 + 3, WORLD_SEED) / 4294967296;
+  return { x: L.x + Math.sin(k * 0.37 + L.ph) * 90, y: k * TOWER_GAP, variant: v < 0.65 ? 0 : v < 0.87 ? 1 : 2 };
+}
+
+/* ---------- old roads: one smooth winding curve per road, at most one road start per 2560px region ---------- */
+const REGION = 2560, ROAD_W = 205, ROAD_DS = 6, ROAD_CAP = 320;
+const roadCache = new Map();
+const smooth01 = t => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+// one road: mostly straight, with an occasional gentle bend
+function buildRoad(r, x, y, h, len, opts = {}) {
+  const b1 = r() * 6.283, b2 = r() * 6.283, bias = r() * 0.6 - 0.3;
+  // bends: a few soft turns placed along the road (none on straight connectors)
+  const bends = [];
+  if (!opts.straight) for (let d = 600 + r() * 900; d < len - 500; d += 900 + r() * 1400)
+    if (r() < 0.45) bends.push({ d, w: 250 + r() * 350, ang: (r() < 0.5 ? -1 : 1) * (0.12 + r() * 0.4) });
+  const pts = [];
+  let x0 = x, y0 = y, x1 = x, y1 = y;
+  for (let d = 0; d <= len; d += ROAD_DS) {
+    let bur = smooth01(0.5 + bias + 0.55 * Math.sin(d / 650 + b1) + 0.35 * Math.sin(d / 1700 + b2));
+    if (opts.clear) for (const c of opts.clear) bur *= smooth01((Math.abs(d - c) - 120) / 200);   // keep crossroads clean
+    const end = smooth01(d / ROAD_CAP) * smooth01((len - d) / ROAD_CAP);
+    pts.push({ x, y, h, d, bur, end });
+    x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+    for (const b of bends) if (Math.abs(d - b.d) < b.w / 2) h += b.ang / b.w * ROAD_DS * (1 + Math.cos((d - b.d) / b.w * 2 * Math.PI));
+    x += Math.cos(h) * ROAD_DS; y += Math.sin(h) * ROAD_DS;
+  }
+  return { pts, x0: x0 - ROAD_W, y0: y0 - ROAD_W, x1: x1 + ROAD_W, y1: y1 + ROAD_W };
+}
+function regionRoads(rx, ry) {
+  const key = rx + ',' + ry;
+  if (roadCache.has(key)) return roadCache.get(key);
+  const r = mulberry32(hash2(rx, ry, WORLD_SEED ^ 0x5bd1e995));
+  const out = [];
+  if (r() < 0.175) {
+    const x = rx * REGION + r() * REGION, y = ry * REGION + r() * REGION, h = r() * 6.283;
+    const len = 2400 + r() * 3200;
+    const crossAt = r() < 0.45 ? len * (0.3 + r() * 0.4) : -1;
+    const main = buildRoad(r, x, y, h, len, { clear: crossAt > 0 ? [crossAt] : null });
+    out.push(main);
+    if (crossAt > 0) {   // a four-way crossroads: a straight road cutting across at right angles
+      const p = main.pts[Math.round(crossAt / ROAD_DS)];
+      const ch = p.h + Math.PI / 2 + (r() - 0.5) * 0.12, clen = 1400 + r() * 1800, back = clen * (0.35 + r() * 0.3);
+      const cr = buildRoad(r, p.x - Math.cos(ch) * back, p.y - Math.sin(ch) * back, ch, clen, { straight: true, clear: [back] });
+      cr.cross = true;
+      out.unshift(cr);           // drawn first, so the main road paints cleanly over the junction
+      main.junction = { x: p.x, y: p.y, h: p.h, ch };
+    }
+  }
+  roadCache.set(key, out);
+  return out;
+}
+function roadsNear(x, y, range = 3) {
+  const rx = Math.floor(x / REGION), ry = Math.floor(y / REGION), out = [];
+  for (let j = -range; j <= range; j++) for (let i = -range; i <= range; i++) out.push(...regionRoads(rx + i, ry + j));
+  return out;
+}
+// what's under (x, y): null, or { kind: 'intact' | 'buried' }
+function roadAt(x, y, pad = 0, roads = roadsNear(x, y)) {
+  const lim = ROAD_W / 2 + pad;
+  for (const R of roads) {
+    if (x < R.x0 - pad || x > R.x1 + pad || y < R.y0 - pad || y > R.y1 + pad) continue;
+    const P = R.pts;
+    for (let i = 0; i < P.length; i += 4) {          // coarse pass, then refine around the hit
+      if (Math.abs(P[i].x - x) > lim + 30 || Math.abs(P[i].y - y) > lim + 30) continue;
+      for (let j = Math.max(0, i - 4); j < Math.min(P.length, i + 5); j++) {
+        const p = P[j];
+        if (p.end < 0.15) continue;
+        const dx = x - p.x, dy = y - p.y;
+        if (Math.abs(-dx * Math.sin(p.h) + dy * Math.cos(p.h)) < lim && Math.abs(dx * Math.cos(p.h) + dy * Math.sin(p.h)) <= ROAD_DS)
+          return { kind: p.bur < 0.5 && p.end > 0.6 ? 'intact' : 'buried' };
+      }
+    }
+  }
+  return null;
+}
+
+// signs: art post-base point (x, y) and what they're made of
+const SIGN_ART = {
+  sign_stop_0: [36, 147, 'metal'], sign_stop_1: [32, 144, 'metal'], sign_stop_2: [40, 150, 'metal'],
+  sign_66_0: [36, 151, 'wood'], sign_66_1: [45, 152, 'wood'], sign_street: [43, 183, 'metal'],
+  sign_wood_0: [50, 153, 'wood'], sign_wood_1: [56, 153, 'wood'], sign_wood_2: [63, 140, 'wood'],
+};
+// Eiffel remnant: four legs at the corners of a square you can drive through
+const EIFFEL = { half: 190, s: 0.75, legR: 52, base: [[123, 285], [124, 285], [125, 281], [138, 282]] };
+const STATUE = { s: 0.6, bx: [69, 70], by: [306, 305], r: 24 };
+const JUNCTION_SIGNS = ['sign_street'];
+const SIGN_S = 0.55, VEGAS = { s: 0.6, bx: 128, by: 368, r: 46 };
+
+const MOUND_ART = [
+  { l: 15, r: 295, peak: 17, front: 209, h: 0.50 },   // mound_0: taller, bigger launch
+  { l: 12, r: 302, peak: 65, front: 202, h: 0.36 },   // mound_1: lower and wider
+];
+/* step pyramid (one tier): truncated box measured from the art at scale s=1.
+   top/base half-widths and half-depths in world px; image anchor = top-center of the platform */
+const PYR = { s: 0.824, Tx: 86.5, Ty: 47.5, Bx: 150, By: 111, H: 37, ax: [195, 190], ay: [80, 88] };
+function pyramidHeight(o, x, y) {
+  const c = o.sc, dx = Math.abs(x - o.x), dy = Math.abs(y - o.y);
+  const u = Math.max(0, dx - PYR.Tx * c) / ((PYR.Bx - PYR.Tx) * c), v = Math.max(0, dy - PYR.Ty * c) / ((PYR.By - PYR.Ty) * c);
+  const f = Math.max(u, v);
+  return f >= 1 ? 0 : PYR.H * c * (1 - f);
+}
+function groundHeight(x, y) {
+  let g = 0;
+  for (const o of nearbyObjects(x, y)) {
+    if (o.type === 'crater') { const d = Math.hypot(x - o.x, y - o.y); if (d < o.r) return craterHeight(CRATER_ART[o.variant], d); continue; }
+    if (o.type !== 'mound') continue;
+    if (o.sc) { g = Math.max(g, pyramidHeight(o, x, y)); continue; }
+    const d = Math.hypot(x - o.x, y - o.y);
+    if (d < o.r) g = Math.max(g, o.h * (1 - d / o.r));   // cone: the pointed top is the launch lip
+  }
+  return g;
+}
+
+/* ---------- game state ---------- */
+const state = { mode: 'title', t: 0, deadT: 0 };
+let car, bullets, particles, tracks, shake, stats, npcs = [], critters = [], decals = [], pendingBooms = [], wind = { a: 0.4, s: 90 };
+
+function startGame() {
+  WORLD_SEED = (Math.random() * 1e9) | 0;
+  chunks.clear(); destroyed.clear(); bigCache.clear(); roadCache.clear(); roadTiles.clear();
+  car = { x: 0, y: 0, vx: 0, vy: 0, a: -Math.PI / 2, r: 27, fireCD: 0, gunSide: 0, fall: 0, fallPit: null, spin: 0, bump: 0, z: 0, vz: 0, air: false, airT: 0 };
+  bullets = []; particles = []; tracks = []; shake = 0;
+  critters = []; npcs = []; decals = []; pendingBooms = [];
+  wind = { a: Math.random() * 6.283, s: 70 + Math.random() * 60 };
+  stats = { dist: 0, cacti: 0, tnt: 0, kills: 0 };
+  state.mode = 'play'; state.deadT = 0; state.death = 'pit';
+}
+
+/* ---------- update ---------- */
+const ROAD_SPEED = 1.15;   // top speed bonus on intact asphalt
+const UFO_SMOKE = [[-70, 155], [60, 235], [-90, 115], [10, 200]];   // smoke vents on the UFO art (x offset, height)
+const GUN = { s: 1.05, z: 25 };   // gun barrel tip on the 3D model (model scale, height)
+const PX_PER_KPH = 4, PX_PER_KM = PX_PER_KPH * 3600;   // speedometer and odometer use the same scale
+const AIR = { gravity: 980, launch: 1.55, minLaunch: 50, steer: 0.3, clear: 18, maxVz: 480 };  // jump tuning
+const P = { accel: 520, brake: 900, reverse: 260, maxSpeed: 560, drag: 0.55, grip: 7.5, driftGrip: 1.4, turn: 2.9 };
+
+function update(dt) {
+  state.t += dt;
+  shake = Math.max(0, shake - dt * 30);
+  if (state.mode === 'title') return;
+
+  updateParticles(dt);
+  updateBullets(dt);
+  for (const p of pendingBooms) { p.t -= dt; if (p.t <= 0) explodeTNT(p.o); }
+  pendingBooms = pendingBooms.filter(p => p.t > 0);
+  if (car) { updateCritters(dt); updateNPCs(dt); }
+  // the crashed saucer smoulders
+  if (car) for (const o of nearbyObjects(car.x, car.y)) if (o.type === 'ufo' && Math.random() < dt * 9) {
+    const [dx, dz] = UFO_SMOKE[(Math.random() * UFO_SMOKE.length) | 0];
+    particles.push({ k: 'smoke', x: o.x + dx + (Math.random() - 0.5) * 6, y: o.y + 2, z: dz, vx: 6 + Math.random() * 8, vy: 0, vz: 22 + Math.random() * 14, life: 2.6, max: 2.6, s: 4 + Math.random() * 4 });
+  }
+
+  if (state.mode === 'falling') {
+    car.fall += dt;
+    const p = car.fallPit;
+    car.x += (p.x - car.x) * Math.min(1, dt * 4);
+    car.y += (p.y - car.y) * Math.min(1, dt * 4);
+    car.spin += dt * 6;
+    if (car.fall > 1.3) { state.mode = 'dead'; state.deadT = 0; state.death = 'pit'; }
+    return;
+  }
+  if (state.mode === 'dead') { state.deadT += dt; return; }
+
+  // --- driving ---
+  const fx = Math.cos(car.a), fy = Math.sin(car.a);
+  const rx = -fy, ry = fx;
+  let fwd = car.vx * fx + car.vy * fy;
+  let lat = car.vx * rx + car.vy * ry;
+
+  const throttle = down('KeyW', 'ArrowUp');
+  const brake = down('KeyS', 'ArrowDown');
+  const steer = (down('KeyD', 'ArrowRight') ? 1 : 0) - (down('KeyA', 'ArrowLeft') ? 1 : 0);
+  const hand = down('ShiftLeft', 'ShiftRight');
+
+  if (!car.air) {
+    if (throttle) fwd += P.accel * (car.road ? 1.2 : 1) * dt;
+    if (brake) fwd -= (fwd > 0 ? P.brake : P.reverse) * dt;
+    fwd *= Math.exp(-P.drag * dt);
+    if (!throttle && !brake) fwd *= Math.exp(-0.6 * dt);
+    const onRoad = roadAt(car.x, car.y);
+    car.road = onRoad && onRoad.kind === 'intact';
+    fwd = Math.max(-220, Math.min(P.maxSpeed * (car.road ? ROAD_SPEED : 1), fwd));
+    lat *= Math.exp(-(hand ? P.driftGrip : P.grip) * dt);
+  }
+  const steerAmt = Math.max(-1, Math.min(1, fwd / 140)) * (car.air ? AIR.steer : 1);
+  car.a += steer * P.turn * dt * steerAmt * (hand ? 1.35 : 1);
+
+  car.vx = fx * fwd + rx * lat;
+  car.vy = fy * fwd + ry * lat;
+  const px = car.x, py = car.y;
+  car.x += car.vx * dt; car.y += car.vy * dt;
+  stats.dist += Math.hypot(car.x - px, car.y - py);
+
+  // --- jumps: ride the ground height, launch off the peak ---
+  const g = groundHeight(car.x, car.y);
+  if (car.air) {
+    car.vz -= AIR.gravity * dt; car.z += car.vz * dt; car.airT += dt;
+    if (car.z <= g) land(g);
+  } else {
+    const groundVz = (g - car.z) / dt;
+    if (car.vz > AIR.minLaunch && groundVz < car.vz - AIR.gravity * dt * 2) {
+      car.air = true; car.airT = 0; car.vz = Math.min(AIR.maxVz, car.vz * AIR.launch); car.z += car.vz * dt;
+      puffs(car.x, car.y, 5);
+    } else if (car.z > 4 && groundVz < -AIR.gravity * dt * 6) {   // ground drops away (off a pyramid's far edge)
+      car.air = true; car.airT = 0; car.vz = Math.max(0, car.vz);
+    } else { car.z = g; car.vz = groundVz; }
+  }
+
+  // tire tracks + dust
+  const spd = Math.hypot(car.vx, car.vy);
+  if (spd > 30 && !car.air) {
+    for (const s of [-1, 1]) {
+      tracks.push({ x: car.x - fx * 18 + rx * 12 * s, y: car.y - fy * 18 + ry * 12 * s, life: 6, slide: Math.abs(lat) > 80 });
+    }
+    if (tracks.length > 900) tracks.splice(0, tracks.length - 900);
+    if (Math.random() < Math.min(1, spd / 300) * (Math.abs(lat) > 80 ? 1 : 0.5)) {
+      particles.push({ k: 'dust', x: car.x - fx * 26 + (Math.random() - 0.5) * 20, y: car.y - fy * 26 + (Math.random() - 0.5) * 20, z: 2, vx: -fx * 30 + (Math.random() - 0.5) * 40, vy: -fy * 30 + (Math.random() - 0.5) * 40, vz: 10, life: 0.9, max: 0.9, s: 6 + Math.random() * 8 });
+    }
+  }
+  for (const t of tracks) t.life -= dt;
+  while (tracks.length && tracks[0].life <= 0) tracks.shift();
+
+  // collisions (flying high enough clears everything)
+  const high = car.z - g > AIR.clear;
+  for (const o of (high ? [] : nearbyObjects(car.x, car.y))) {
+    if (o.type === 'mound' || o.type === 'crater') continue;
+    if (o.type === 'airstream') {    // oval fence: push out in squashed space
+      const q = o.r / AIRSTREAM_ART.Ry, ex = car.x - o.x, ey = (car.y - o.y) * q, ed = Math.hypot(ex, ey), mD = o.r + car.r;
+      if (ed < mD && ed > 0.001) {
+        const ux = ex / ed, uy = ey / ed;
+        car.x = o.x + ux * mD; car.y = o.y + uy * mD / q;
+        let nx = ux, ny = uy * q; const nm = Math.hypot(nx, ny); nx /= nm; ny /= nm;
+        const vn = car.vx * nx + car.vy * ny;
+        if (vn < 0) { car.vx -= nx * vn * 1.45; car.vy -= ny * vn * 1.45; car.vx *= 0.7; car.vy *= 0.7; if (-vn > 120) shake = Math.min(14, -vn / 30); }
+      }
+      continue;
+    }
+    const dx = car.x - o.x, dy = car.y - o.y, d = Math.hypot(dx, dy);
+    if (o.type === 'pit') {
+      if (d < o.r - 14) { state.mode = 'falling'; car.fallPit = o; car.fall = 0; shake = 6; return; }
+      continue;
+    }
+    const minD = car.r + o.r;
+    if (o.type === 'tnt' && d < minD) { explodeTNT(o); if (state.mode !== 'play') return; continue; }
+    if (d < minD && d > 0.001) {
+      const nx = dx / d, ny = dy / d;
+      const vn = car.vx * nx + car.vy * ny;
+      if (o.type === 'sign' && spd > 40) {      // flatten it
+        smashSign(o, car.vx, car.vy); car.vx *= 0.97; car.vy *= 0.97; shake = Math.max(shake, 3);
+        continue;
+      }
+      if (o.type === 'carcass' && spd > 40) {   // crunch through the rusted shell
+        smashCarcass(o, car.vx, car.vy);
+        car.vx *= 0.88; car.vy *= 0.88; shake = Math.max(shake, 6);
+        continue;
+      }
+      if (o.type === 'cactus' && spd > 90) {   // plow through it
+        destroyCactus(o, car.vx, car.vy);
+        car.vx *= 0.95; car.vy *= 0.95; shake = Math.max(shake, 4);
+        continue;
+      }
+      car.x = o.x + nx * minD; car.y = o.y + ny * minD;
+      if (vn < 0) {
+        car.vx -= nx * vn * 1.45; car.vy -= ny * vn * 1.45;
+        car.vx *= 0.7; car.vy *= 0.7;
+        if (-vn > 120) { shake = Math.min(14, -vn / 30); sparks(o.x + nx * o.r, o.y + ny * o.r, 6); }
+      }
+    }
+  }
+
+  // Bigfoot is solid: you bounce off him and he gives you a look
+  for (const c of (high ? [] : critters)) {
+    if (c.kind !== 'bigfoot') continue;
+    const dx = car.x - c.x, dy = car.y - c.y, d = Math.hypot(dx, dy), minD = car.r + 20;
+    if (d < minD && d > 0.001) {
+      const nx = dx / d, ny = dy / d, vn = car.vx * nx + car.vy * ny;
+      car.x = c.x + nx * minD; car.y = c.y + ny * minD;
+      if (vn < 0) { car.vx -= nx * vn * 1.5; car.vy -= ny * vn * 1.5; car.vx *= 0.7; car.vy *= 0.7; shake = Math.max(shake, Math.min(10, -vn / 40)); }
+      c.state = 'flex'; c.t = 1.2; c.face = dx > 0 ? 1 : -1;
+    }
+  }
+  // run over NPCs
+  for (const n of (high ? [] : npcs)) {
+    const d = Math.hypot(car.x - n.x, car.y - n.y);
+    if (d > car.r + n.def.r) continue;
+    if (n.kind === 'buffalo' && n.state === 'charge' && spd < 260) {   // it wins: you get rammed
+      const a = Math.atan2(n.vy, n.vx);
+      car.vx += Math.cos(a) * 420; car.vy += Math.sin(a) * 420; shake = 14;
+      n.state = 'cool'; n.t = 2.2; n.vx = n.vy = 0;
+      sparks(n.x, n.y, 8); continue;
+    }
+    if (spd > n.def.runOver) { gib(n, car.vx, car.vy); car.vx *= 0.93; car.vy *= 0.93; shake = Math.max(shake, n.kind === 'buffalo' ? 10 : 5); }
+    else {  // too slow: shove it aside
+      const nx = (n.x - car.x) / (d || 1), ny = (n.y - car.y) / (d || 1);
+      n.x = car.x + nx * (car.r + n.def.r); n.y = car.y + ny * (car.r + n.def.r);
+    }
+  }
+
+  // guns
+  car.fireCD -= dt;
+  if (down('Space') && car.fireCD <= 0) {
+    car.fireCD = 0.055;
+    car.gunSide ^= 1;
+    const s = car.gunSide ? 1 : -1;
+    const gx = car.x + fx * 46 * GUN.s + rx * 10.5 * GUN.s * s, gy = car.y + fy * 46 * GUN.s + ry * 10.5 * GUN.s * s;
+    const spread = (Math.random() - 0.5) * 0.05;
+    const bx = Math.cos(car.a + spread), by = Math.sin(car.a + spread);
+    const bs = 1250 + Math.max(0, fwd);
+    bullets.push({ z: car.z + GUN.z, x: gx, y: gy, px: gx, py: gy, vx: bx * bs, vy: by * bs, life: 0.55 });
+    particles.push({ k: 'flash', x: gx, y: gy, z: car.z + GUN.z, vx: car.vx, vy: car.vy, vz: 0, life: 0.05, max: 0.05, a: car.a, s: 1 });
+    particles.push({ k: 'shell', x: car.x + fx * 12 + rx * 10 * s, y: car.y + fy * 12 + ry * 10 * s, z: car.z + GUN.z, vx: rx * 120 * s + car.vx, vy: ry * 120 * s + car.vy, vz: 80, life: 0.5, max: 0.5, s: 1 });
+  }
+}
+
+function land(g) {
+  const impact = -car.vz;
+  car.air = false; car.z = g; car.vz = 0;
+  if (car.airT > 0.25) {
+    shake = Math.max(shake, Math.min(16, impact / 45));
+    puffs(car.x, car.y, 6 + Math.min(10, impact / 60));
+    car.vx *= 0.94; car.vy *= 0.94;
+    for (const n of npcs) if (Math.hypot(n.x - car.x, n.y - car.y) < car.r + n.def.r + 10) gib(n, car.vx, car.vy);  // crushed
+  }
+}
+
+function updateBullets(dt) {
+  for (const b of bullets) {
+    b.px = b.x; b.py = b.y;
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    b.life -= dt;
+    for (const n of npcs) {
+      if (n.dead) continue;
+      const D = n.def;
+      let hit = false;
+      for (const f of [0, 0.5, 1]) {
+        const wx = b.px + (b.x - b.px) * f, wy = b.py + (b.y - b.py) * f;
+        if (Math.hypot(wx - n.x, wy - n.y) < D.r + 14) { hit = true; break; }
+        const qy = wy * K - (b.z || 12);
+        if (Math.abs(wx - n.x) < D.w && qy > n.y * K - D.h && qy < n.y * K + 6) { hit = true; break; }
+      }
+      if (hit) {
+        b.life = 0; n.hp--; n.hitT = 0.12; n.angry = 3;
+        inkDrops(n.x, n.y, 4, b.vx * 0.1, b.vy * 0.1, D.h * 0.5);
+        if (n.hp <= 0) gib(n, b.vx * 0.2, b.vy * 0.2);
+        break;
+      }
+    }
+    if (b.life <= 0) continue;
+    for (const o of nearbyObjects(b.x, b.y)) {
+      if (o.type === 'pit' || o.type === 'mound' || o.type === 'crater') continue;
+      // segment-circle test so fast bullets don't tunnel
+      const sx = b.x - b.px, sy = b.y - b.py;
+      const L = sx * sx + sy * sy || 1;
+      let t = ((o.x - b.px) * sx + (o.y - b.py) * sy) / L; t = Math.max(0, Math.min(1, t));
+      const cx = b.px + sx * t, cy = b.py + sy * t;
+      const hitR = o.type === 'cactus' ? o.r + 18 : o.r + 2;   // generous cactus hitbox
+      let hit = Math.hypot(cx - o.x, cy - o.y) < hitR;
+      // cacti also count a hit where the bullet visually overlaps the drawn cactus on screen
+      if (!hit && (o.type === 'cactus' || o.type === 'tnt')) {
+        const tall = o.type === 'cactus' ? o.h * 1.35 : 62;
+        const top = o.y * K - tall, bot = o.y * K + 6, halfW = o.type === 'cactus' ? 22 : 32;
+        for (const f of [0, 0.5, 1]) {
+          const qx = b.px + sx * f, qy = (b.py + sy * f) * K - (b.z || 12);
+          if (Math.abs(qx - o.x) < halfW && qy > top && qy < bot) { hit = true; break; }
+        }
+      }
+      if (hit) {
+        b.life = 0;
+        if (o.type === 'cactus') {
+          o.hp = (o.hp ?? 3) - 1;
+          if (o.hp <= 0) destroyCactus(o, b.vx * 0.15, b.vy * 0.15);
+          else puffs(cx, cy, 3);
+        } else if (o.type === 'tnt') explodeTNT(o);
+        else if (o.type === 'carcass') { o.hp = (o.hp ?? 6) - 1; sparks(cx, cy, 3); if (o.hp <= 0) smashCarcass(o, b.vx * 0.1, b.vy * 0.1); }
+        else sparks(cx, cy, 4);
+        break;
+      }
+    }
+  }
+  bullets = bullets.filter(b => b.life > 0);
+}
+
+function destroyCactus(o, vx, vy) {
+  destroyed.add(o.id);
+  stats.cacti++;
+  for (let i = 0; i < 18; i++) {
+    const a = Math.random() * 6.283, s = 60 + Math.random() * 220;
+    particles.push({ k: 'chunk', x: o.x, y: o.y, z: Math.random() * o.h, vx: Math.cos(a) * s + vx, vy: Math.sin(a) * s + vy, vz: 120 + Math.random() * 260, life: 1.4, max: 1.4, s: 3 + Math.random() * 7, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 20 });
+  }
+  puffs(o.x, o.y, 8);
+  particles.push({ k: 'blast', x: o.x, y: o.y, z: o.h * 0.5, vx: 0, vy: 0, vz: 0, life: 0.3, max: 0.3, s: 1 });
+  particles.push({ k: 'explode', x: o.x, y: o.y + 1, z: o.h * 0.45, vx: 0, vy: 0, vz: 0, life: 0.6, max: 0.6, s: o.h * 1.5 });
+  particles.push({ k: 'stump', x: o.x, y: o.y, z: 0, vx: 0, vy: 0, vz: 0, life: 25, max: 25, s: 1, seed: o.seed });
+}
+const BOOM_R = 150;      // blast radius: destroys cacti, sets off other TNT
+const BOOM_KILL_R = 95; // car inside this radius is destroyed
+function explodeTNT(o) {
+  if (destroyed.has(o.id)) return;
+  destroyed.add(o.id);
+  stats.tnt++;
+  boom(o.x, o.y, 1.35);
+  decals.push({ x: o.x, y: o.y, s: 1.1 }); if (decals.length > 150) decals.shift();
+  for (let i = 0; i < 14; i++) {
+    const a = Math.random() * 6.283, sp = 120 + Math.random() * 320;
+    particles.push({ k: 'chunk', wood: true, x: o.x, y: o.y, z: 10 + Math.random() * 20, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz: 200 + Math.random() * 300, life: 1.6, max: 1.6, s: 4 + Math.random() * 8, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 25 });
+  }
+  for (const q of nearbyObjects(o.x, o.y)) {
+    const d = Math.hypot(q.x - o.x, q.y - o.y);
+    if (d > BOOM_R + q.r) continue;
+    if (q.type === 'cactus') destroyCactus(q, (q.x - o.x) * 2, (q.y - o.y) * 2);
+    else if (q.type === 'tnt' && !pendingBooms.some(p => p.o === q)) pendingBooms.push({ o: q, t: 0.12 + d / 1500 });
+  }
+  for (const c of critters) if (Math.hypot(c.x - o.x, c.y - o.y) < BOOM_R * 1.6) c.scare = 2;
+  for (const n of npcs) { const d = Math.hypot(n.x - o.x, n.y - o.y); if (d < BOOM_R + n.def.r && !n.dead) gib(n, (n.x - o.x) * 3, (n.y - o.y) * 3); }
+  if (car && state.mode === 'play' && Math.hypot(car.x - o.x, car.y - o.y) < BOOM_KILL_R + car.r) killCar();
+}
+function boom(x, y, scale) {
+  particles.push({ k: 'boom', x, y: y + 2, z: 0, vx: 0, vy: 0, vz: 0, life: 0.9, max: 0.9, s: 192 * scale });
+  particles.push({ k: 'blast', x, y, z: 30, vx: 0, vy: 0, vz: 0, life: 0.35, max: 0.35, s: 1 });
+  puffs(x, y, 10);
+  shake = Math.max(shake, 16 * scale);
+}
+const DEATH_WORDS = ['smithereens', 'word_boom', 'word_smoked', 'word_ruhroh'];
+function killCar() {
+  state.mode = 'dead'; state.deadT = 0; state.death = 'boom';
+  const pool = DEATH_WORDS.filter(w => w !== state.word);       // never the same twice in a row
+  state.word = pool[(Math.random() * pool.length) | 0];
+  car.vx = car.vy = 0;
+  boom(car.x, car.y, 1.6);
+  decals.push({ x: car.x, y: car.y, s: 1.25 });
+  sparks(car.x, car.y, 14);
+}
+
+/* ---------- critters & tumbleweeds (spawned around the player, not part of chunks) ---------- */
+const CRITTER_TARGET = { jackalope: 3, coyote: 2, tumbleweed: 4, roadrunner: 2, bigfoot: 1 };
+const CRITTER_SPAWN = { bigfoot: 0.04, roadrunner: 0.5 };   // spawn chance per second when below target (default 0.8)
+function spawnCritter(kind) {
+  let x, y;
+  if (kind === 'tumbleweed') {         // come in from upwind
+    const d = 900 + Math.random() * 300, side = (Math.random() - 0.5) * 1600;
+    x = car.x - Math.cos(wind.a) * d - Math.sin(wind.a) * side;
+    y = car.y - Math.sin(wind.a) * d + Math.cos(wind.a) * side;
+  } else {
+    const a = Math.random() * 6.283, d = 850 + Math.random() * 450;
+    x = car.x + Math.cos(a) * d; y = car.y + Math.sin(a) * d;
+    if (kind === 'roadrunner' && Math.random() < 0.7) {     // likes the old roads
+      for (const R of roadsNear(car.x, car.y, 1)) for (let i = 0; i < R.pts.length; i += 25) {
+        const p = R.pts[i], pd = Math.hypot(p.x - car.x, p.y - car.y);
+        if (pd > 800 && pd < 1300 && p.end > 0.8) { x = p.x; y = p.y; break; }
+      }
+    }
+  }
+  // don't spawn inside a pit or rock
+  for (const o of nearbyObjects(x, y)) if (o.type !== 'crater' && o.type !== 'mound' && Math.hypot(o.x - x, o.y - y) < o.r + 30) return;
+  critters.push({ kind, x, y, vx: 0, vy: 0, z: 0, t: Math.random() * 2, phase: 0, state: 'idle', face: Math.random() < 0.5 ? 1 : -1, scare: 0, sc: 0.8 + Math.random() * 0.5, roll: Math.random() * 4 });
+}
+function updateCritters(dt) {
+  wind.a += (Math.random() - 0.5) * dt * 0.2;
+  for (const kind in CRITTER_TARGET) {
+    if (kind === 'coyote' && !IMG.coyote) continue;   // waits for art
+    if ((kind === 'bigfoot' || kind === 'roadrunner') && !IMG[kind]) continue;
+    if (critters.filter(c => c.kind === kind).length < CRITTER_TARGET[kind] && Math.random() < dt * (CRITTER_SPAWN[kind] ?? 0.8)) spawnCritter(kind);
+  }
+  for (const c of critters) {
+    const dx = c.x - car.x, dy = c.y - car.y, d = Math.hypot(dx, dy);
+    const carSpd = Math.hypot(car.vx, car.vy);
+    c.scare = Math.max(0, c.scare - dt);
+    if (c.kind === 'tumbleweed') {
+      const sp = wind.s * c.sc;
+      c.vx += (Math.cos(wind.a) * sp - c.vx) * dt; c.vy += (Math.sin(wind.a) * sp - c.vy) * dt;
+      c.x += c.vx * dt; c.y += c.vy * dt;
+      c.t += dt * (2.2 + c.sc);
+      c.z = Math.abs(Math.sin(c.t)) * 16 * c.sc;
+      c.roll += (c.vx >= 0 ? 1 : -1) * Math.hypot(c.vx, c.vy) * dt / 40;
+      // car smashes through it
+      if (state.mode === 'play' && d < car.r + 18 && carSpd > 60) { c.dead = true; twigs(c.x, c.y); }
+      continue;
+    }
+    if (c.kind === 'bigfoot') { updateBigfoot(c, dt, dx, dy, d, carSpd); continue; }
+    if (c.kind === 'roadrunner') { updateRoadrunner(c, dt, dx, dy, d, carSpd); continue; }
+    // animals: flee from a nearby car, otherwise wander / rest
+    const fleeing = c.scare > 0 || (d < 300 && (carSpd > 40 || d < 150));
+    if (fleeing) c.scare = Math.max(c.scare, 0.5);
+    const speed = c.kind === 'coyote' ? (fleeing ? 340 : 70) : (fleeing ? 300 : 90);
+    c.t -= dt;
+    if (fleeing) {
+      if (c.state !== 'move' || c.t < 0) {
+        const a = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.8;
+        c.vx = Math.cos(a) * speed; c.vy = Math.sin(a) * speed; c.state = 'move'; c.t = 0.6;
+      }
+    } else if (c.t < 0) {
+      if (c.state === 'move' || Math.random() < 0.55) { c.state = 'idle'; c.vx = c.vy = 0; c.t = 1 + Math.random() * 3; c.pose = Math.random(); }
+      else { const a = Math.random() * 6.283; c.vx = Math.cos(a) * speed; c.vy = Math.sin(a) * speed; c.state = 'move'; c.t = 0.8 + Math.random() * 1.5; }
+    }
+    if (c.vx > 1) c.face = 1; else if (c.vx < -1) c.face = -1;
+    if (c.state === 'move') {
+      const rate = c.kind === 'jackalope' ? (fleeing ? 3.2 : 2.2) : (fleeing ? 2.6 : 1.4);
+      c.phase = (c.phase + dt * rate) % 1;
+      // jackalopes only travel while airborne
+      const moving = c.kind !== 'jackalope' || (c.phase > 0.15 && c.phase < 0.85);
+      if (moving) {
+        const nx = c.x + c.vx * dt * (c.kind === 'jackalope' ? 1.4 : 1), ny = c.y + c.vy * dt * (c.kind === 'jackalope' ? 1.4 : 1);
+        let blocked = false;
+        for (const o of nearbyObjects(nx, ny)) if (o.type !== 'tnt' && o.type !== 'mound' && o.type !== 'crater' && Math.hypot(o.x - nx, o.y - ny) < o.r + 10) { blocked = true; break; }
+        if (blocked) { c.vx = -c.vx; c.vy = -c.vy; } else { c.x = nx; c.y = ny; }
+      }
+      c.z = c.kind === 'jackalope' && moving ? Math.sin((c.phase - 0.15) / 0.7 * Math.PI) * 14 : 0;
+    } else { c.z = 0; c.phase = 0; }
+  }
+  critters = critters.filter(c => !c.dead && Math.hypot(c.x - car.x, c.y - car.y) < 1800);
+}
+/* ---------- NPCs: things to shoot and run over ---------- */
+const NPC = {
+  //          hitbox r, half-width & height on screen, hp, speeds, sense range, how many around, run-over speed, sheet frame size
+  zombie:  { r: 14, w: 18, h: 72, hp: 2, walk: 28, chase: 62,  sense: 600, count: 5, runOver: 50,  fw: 64,  fh: 96 },
+  alien:   { r: 14, w: 18, h: 82, hp: 3, walk: 60, chase: 150, sense: 650, count: 2, runOver: 70,  fw: 64,  fh: 96 },
+  buffalo: { r: 34, w: 50, h: 78, hp: 8, walk: 35, chase: 330, sense: 520, count: 1, runOver: 230, fw: 128, fh: 96 },
+};
+function spawnNPC(kind) {
+  const a = Math.random() * 6.283, d = 900 + Math.random() * 400;
+  const x = car.x + Math.cos(a) * d, y = car.y + Math.sin(a) * d;
+  for (const o of nearbyObjects(x, y)) if (o.type !== 'crater' && o.type !== 'mound' && Math.hypot(o.x - x, o.y - y) < o.r + 40) return;
+  const def = NPC[kind];
+  npcs.push({ kind, def, x, y, vx: 0, vy: 0, hp: def.hp, face: 1, phase: Math.random(), state: 'idle', t: Math.random() * 2, hitT: 0, angry: 0, seed: (Math.random() * 1e9) | 0 });
+}
+function updateNPCs(dt) {
+  for (const kind in NPC) {
+    const want = NPC[kind].count;
+    if (npcs.filter(n => n.kind === kind).length < want && Math.random() < dt * (kind === 'buffalo' ? 0.15 : 0.6)) spawnNPC(kind);
+  }
+  const alive = state.mode === 'play';
+  for (const n of npcs) {
+    const D = n.def;
+    const dx = car.x - n.x, dy = car.y - n.y, d = Math.hypot(dx, dy) || 1;
+    const ux = dx / d, uy = dy / d;
+    n.hitT = Math.max(0, n.hitT - dt); n.angry = Math.max(0, n.angry - dt); n.t -= dt;
+    const aware = alive && (d < D.sense || n.angry > 0);
+    let speed = 0;
+    if (n.kind === 'zombie') {
+      // shambles toward you, lunges when close
+      if (aware) { n.state = d < 90 ? 'lunge' : 'move'; speed = D.chase; n.vx = ux; n.vy = uy; }
+      else if (n.t < 0) { n.state = Math.random() < 0.5 ? 'idle' : 'move'; const a = Math.random() * 6.283; n.vx = Math.cos(a); n.vy = Math.sin(a); n.t = 2 + Math.random() * 3; }
+      if (!aware && n.state === 'move') speed = D.walk;
+    } else if (n.kind === 'alien') {
+      // stalks at a distance, darts sideways, hisses, closes in when you slow down
+      if (aware) {
+        if (n.t < 0) {
+          const carSpd = Math.hypot(car.vx, car.vy);
+          const r = Math.random();
+          if (r < 0.3) { n.state = 'hiss'; n.vx = n.vy = 0; n.t = 0.6; }
+          else {
+            const want = carSpd < 80 ? 60 : 260;              // keep this far from you
+            const side = Math.random() < 0.5 ? 1 : -1;
+            const radial = d > want ? 1 : -1;
+            n.vx = ux * radial * 0.6 - uy * side; n.vy = uy * radial * 0.6 + ux * side;
+            const m = Math.hypot(n.vx, n.vy); n.vx /= m; n.vy /= m;
+            n.state = 'move'; n.t = 0.35 + Math.random() * 0.5;
+          }
+        }
+        if (n.state === 'move') speed = D.chase * 2;
+      } else {
+        if (n.t < 0) { n.state = Math.random() < 0.5 ? 'idle' : 'move'; const a = Math.random() * 6.283; n.vx = Math.cos(a); n.vy = Math.sin(a); n.t = 1 + Math.random() * 2; }
+        if (n.state === 'move') speed = D.walk;
+      }
+    } else if (n.kind === 'buffalo') {
+      // paws the ground, then charges in a straight line
+      if (n.state === 'charge') { speed = D.chase; if (n.t < 0) { n.state = 'cool'; n.t = 2 + Math.random(); } }
+      else if (n.state === 'cool') { if (n.t < 0) n.state = 'idle'; }
+      else if (aware && n.state !== 'windup') { n.state = 'windup'; n.t = 0.9; n.vx = n.vy = 0; }
+      else if (n.state === 'windup') {
+        n.face = dx >= 0 ? 1 : -1;
+        if (n.t < 0) { n.state = 'charge'; n.t = 1.8; n.vx = ux; n.vy = uy; }
+      } else if (n.t < 0) { const a = Math.random() * 6.283; n.vx = Math.cos(a); n.vy = Math.sin(a); n.t = 3 + Math.random() * 3; n.wander = Math.random() < 0.5; }
+      else if (n.wander) speed = D.walk;
+      if (Math.random() < dt * (n.state === 'charge' ? 30 : 4)) embers(n);
+    }
+    if (speed > 0) {
+      const nx = n.x + n.vx * speed * dt, ny = n.y + n.vy * speed * dt;
+      let blocked = false;
+      for (const o of nearbyObjects(nx, ny)) {
+        if (o.type === 'mound' || o.type === 'crater' || Math.hypot(o.x - nx, o.y - ny) >= o.r + D.r) continue;
+        if (o.type === 'tnt' && n.kind === 'buffalo' && n.state === 'charge') { explodeTNT(o); continue; }
+        if (o.type === 'cactus' && n.kind === 'buffalo' && n.state === 'charge') { destroyCactus(o, n.vx * 200, n.vy * 200); continue; }
+        if (o.type === 'pit') { if (Math.hypot(o.x - nx, o.y - ny) < o.r - 6) { n.dead = true; n.fell = true; } continue; }
+        blocked = true; break;
+      }
+      if (blocked) {
+        if (n.state === 'charge') { n.state = 'cool'; n.t = 2; shake = Math.max(shake, d < 600 ? 4 : 0); }
+        const a = Math.random() * 6.283; n.vx = Math.cos(a); n.vy = Math.sin(a);
+      } else { n.x = nx; n.y = ny; }
+      n.phase = (n.phase + dt * speed / (n.kind === 'buffalo' ? 110 : 45)) % 1;
+    }
+    if (Math.abs(n.vx) > 0.05 && n.state !== 'windup') n.face = n.vx > 0 ? 1 : -1;
+    if (aware && n.kind !== 'buffalo') n.face = dx >= 0 ? 1 : -1;
+  }
+  npcs = npcs.filter(n => !n.dead && Math.hypot(n.x - car.x, n.y - car.y) < 2000);
+}
+function gib(n, vx, vy) {
+  if (n.dead) return;
+  n.dead = true; stats.kills++;
+  const D = n.def, pieces = n.kind === 'buffalo' ? 16 : 10;
+  for (let i = 0; i < pieces; i++) {
+    const a = Math.random() * 6.283, sp = 80 + Math.random() * 280;
+    particles.push({ k: 'gib', who: n.kind, f: i % 8, x: n.x, y: n.y, z: D.h * (0.2 + Math.random() * 0.6), vx: Math.cos(a) * sp + vx * 0.6, vy: Math.sin(a) * sp + vy * 0.6, vz: 150 + Math.random() * 320, life: 2.2, max: 2.2, s: (n.kind === 'buffalo' ? 9 : 6) + Math.random() * 6, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 22 });
+  }
+  inkDrops(n.x, n.y, 18, vx * 0.4, vy * 0.4, D.h * 0.5);
+  particles.push({ k: 'gibburst', x: n.x, y: n.y, z: D.h * 0.45, vx: 0, vy: 0, vz: 0, life: 0.45, max: 0.45, s: n.kind === 'buffalo' ? 190 : 120 });
+  if (n.kind === 'buffalo') for (let i = 0; i < 10; i++) embers(n, true);
+  decals.push({ x: n.x, y: n.y, s: n.kind === 'buffalo' ? 1.1 : 0.7, img: 'splat', seed: n.seed }); if (decals.length > 150) decals.shift();
+}
+function inkDrops(x, y, cnt, vx, vy, z) {
+  for (let i = 0; i < cnt; i++) {
+    const a = Math.random() * 6.283, sp = 40 + Math.random() * 220;
+    particles.push({ k: 'drop', x, y, z: z * (0.5 + Math.random()), vx: Math.cos(a) * sp + vx, vy: Math.sin(a) * sp + vy, vz: 60 + Math.random() * 200, life: 1, max: 1, s: 1.2 + Math.random() * 2 });
+  }
+}
+function embers(n, burst) {
+  particles.push({ k: 'ember', x: n.x + (Math.random() - 0.5) * 50, y: n.y + (Math.random() - 0.5) * 10, z: n.def.h * (0.6 + Math.random() * 0.4), vx: (Math.random() - 0.5) * (burst ? 200 : 30), vy: (Math.random() - 0.5) * (burst ? 200 : 30), vz: 40 + Math.random() * 60, life: 0.7, max: 0.7, s: 2 + Math.random() * 3 });
+}
+
+// try to move a critter, bouncing off solid things
+function critterStep(c, nx, ny, rad) {
+  for (const o of nearbyObjects(nx, ny)) if (o.type !== 'tnt' && o.type !== 'mound' && o.type !== 'crater' && Math.hypot(o.x - nx, o.y - ny) < o.r + rad) return false;
+  c.x = nx; c.y = ny; return true;
+}
+// Bigfoot: ambles about, scratches, and waves or flexes at you as you go by. Solid: you bounce off him.
+function updateBigfoot(c, dt, dx, dy, d, carSpd) {
+  c.t -= dt;
+  if (d < 380 && c.greet <= 0 && state.mode === 'play') { c.state = Math.random() < 0.6 ? 'wave' : 'flex'; c.t = 1.6; c.greet = 6; c.face = dx < 0 ? 1 : -1; }
+  c.greet = (c.greet || 0) - dt;
+  if (c.t < 0) {
+    const q = Math.random();
+    if (q < 0.4) { c.state = 'move'; const a = Math.random() * 6.283; c.vx = Math.cos(a) * 38; c.vy = Math.sin(a) * 38; c.t = 2 + Math.random() * 3; }
+    else { c.state = q < 0.75 ? 'idle' : 'scratch'; c.vx = c.vy = 0; c.t = 1.5 + Math.random() * 2.5; }
+  }
+  // step out of the way of a car bearing down on him
+  if (d < 220 && carSpd > 120 && (car.vx * -dx + car.vy * -dy) / (d * carSpd) < -0.85) {
+    const side = (car.vx * dy - car.vy * dx) > 0 ? 1 : -1;
+    c.state = 'move'; c.vx = -car.vy / carSpd * 70 * side; c.vy = car.vx / carSpd * 70 * side; c.t = 0.8;
+  }
+  if (c.state === 'move') {
+    if (!critterStep(c, c.x + c.vx * dt, c.y + c.vy * dt, 26)) { c.vx = -c.vx; c.vy = -c.vy; }
+    c.phase = (c.phase + dt * 0.9) % 1;
+    if (c.vx > 1) c.face = 1; else if (c.vx < -1) c.face = -1;
+  }
+}
+// Roadrunner: pecks and bobs, then bolts faster than you can drive. Running beside you if you're moving fast.
+function updateRoadrunner(c, dt, dx, dy, d, carSpd) {
+  c.t -= dt;
+  if (c.state === 'idle' && (d < 330 || c.scare > 0) && state.mode === 'play') { c.state = 'crouch'; c.t = 0.18; }
+  else if (c.state === 'crouch' && c.t < 0) {
+    let a;
+    if (carSpd > 200 && d < 400) a = Math.atan2(car.vy, car.vx) + (Math.random() - 0.5) * 0.25;   // race you
+    else a = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.7;                                    // or just flee
+    const sp = Math.max(780, carSpd * 1.5);
+    c.vx = Math.cos(a) * sp; c.vy = Math.sin(a) * sp; c.state = 'run'; c.t = 1.4 + Math.random() * 1.2;
+  } else if (c.state === 'run') {
+    if (!critterStep(c, c.x + c.vx * dt, c.y + c.vy * dt, 10)) { const a = Math.atan2(c.vy, c.vx) + (Math.random() < 0.5 ? 1 : -1) * 1.2, sp = Math.hypot(c.vx, c.vy); c.vx = Math.cos(a) * sp; c.vy = Math.sin(a) * sp; }
+    c.phase = (c.phase + dt * 9) % 1;
+    if (Math.random() < dt * 30) particles.push({ k: 'dust', x: c.x - c.vx * 0.03, y: c.y - c.vy * 0.03, z: 2, vx: -c.vx * 0.05, vy: -c.vy * 0.05, vz: 12, life: 0.6, max: 0.6, s: 4 + Math.random() * 4 });
+    if (c.t < 0) { c.state = 'idle'; c.vx = c.vy = 0; c.t = 1 + Math.random() * 2; }
+  } else if (c.state === 'idle' && c.t < 0) {
+    if (Math.random() < 0.5) { const a = Math.random() * 6.283; c.vx = Math.cos(a) * 60; c.vy = Math.sin(a) * 60; c.state = 'walk'; c.t = 0.6 + Math.random(); }
+    else { c.pose = Math.random(); c.t = 0.8 + Math.random() * 1.5; }
+  } else if (c.state === 'walk') {
+    critterStep(c, c.x + c.vx * dt, c.y + c.vy * dt, 10); c.phase = (c.phase + dt * 2.5) % 1;
+    if (c.t < 0) { c.state = 'idle'; c.vx = c.vy = 0; c.t = 1 + Math.random() * 2; }
+  }
+  if (c.vx > 1) c.face = 1; else if (c.vx < -1) c.face = -1;
+}
+
+function twigs(x, y) {
+  for (let i = 0; i < 12; i++) {
+    const a = Math.random() * 6.283, sp = 60 + Math.random() * 200;
+    particles.push({ k: 'twig', x, y, z: 10 + Math.random() * 20, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz: 80 + Math.random() * 160, life: 0.9, max: 0.9, s: 4 + Math.random() * 6, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 20 });
+  }
+}
+
+function smashSign(o, vx, vy) {
+  if (destroyed.has(o.id)) return;
+  destroyed.add(o.id);
+  const wood = SIGN_ART[o.art] && SIGN_ART[o.art][2] === 'wood';
+  if (wood) { twigs(o.x, o.y); twigs(o.x, o.y); }
+  else for (let i = 0; i < 6; i++) {
+    const a = Math.random() * 6.283, sp = 80 + Math.random() * 200;
+    particles.push({ k: 'gib', who: 'scrap', f: [4, 7, 5][i % 3], x: o.x, y: o.y, z: 20 + Math.random() * 30, vx: Math.cos(a) * sp + vx * 0.6, vy: Math.sin(a) * sp + vy * 0.6, vz: 120 + Math.random() * 200, life: 2, max: 2, s: 5 + Math.random() * 4, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 18 });
+  }
+  puffs(o.x, o.y, 4);
+}
+function smashCarcass(o, vx, vy) {
+  if (destroyed.has(o.id)) return;
+  destroyed.add(o.id);
+  for (let i = 0; i < 14; i++) {
+    const a = Math.random() * 6.283, sp = 70 + Math.random() * 240;
+    particles.push({ k: 'gib', who: 'scrap', f: (Math.random() * 8) | 0, x: o.x, y: o.y, z: 6 + Math.random() * 24, vx: Math.cos(a) * sp + vx * 0.5, vy: Math.sin(a) * sp + vy * 0.5, vz: 90 + Math.random() * 220, life: 2.4, max: 2.4, s: 6 + Math.random() * 6, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 18 });
+  }
+  puffs(o.x, o.y, 9);
+  sparks(o.x, o.y, 6);
+}
+
+function sparks(x, y, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * 6.283, s = 120 + Math.random() * 260;
+    particles.push({ k: 'spark', x, y, z: 6 + Math.random() * 20, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vz: 60 + Math.random() * 120, life: 0.25, max: 0.25, s: 1 });
+  }
+}
+function puffs(x, y, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * 6.283, s = 20 + Math.random() * 80;
+    particles.push({ k: 'dust', x, y, z: 10 + Math.random() * 30, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vz: 20, life: 0.8, max: 0.8, s: 8 + Math.random() * 10 });
+  }
+}
+function updateParticles(dt) {
+  for (const p of particles) {
+    p.life -= dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.k === 'chunk' || p.k === 'spark' || p.k === 'shell' || p.k === 'twig' || p.k === 'gib' || p.k === 'drop') {
+      p.vz -= 900 * dt; p.z += p.vz * dt;
+      if (p.z < 0) { p.z = 0; p.vz *= -0.3; p.vx *= 0.5; p.vy *= 0.5; }
+      if (p.rot !== undefined) p.rot += p.vr * dt;
+    } else if (p.k === 'ember') {
+      p.z += p.vz * dt; p.vx *= 0.95; p.vy *= 0.95;
+    } else if (p.k === 'dust' || p.k === 'smoke') {
+      p.z += p.vz * dt; p.vx *= 0.96; p.vy *= 0.96;
+    }
+  }
+  particles = particles.filter(p => p.life > 0);
+}
+
+/* ---------- drawing helpers ---------- */
+// hand-drawn line "boil": seeds shift a few times per second
+const boil = () => Math.floor(state.t * 5) % 3;
+
+function wobblyPoly(cx, cy, rx, ry, seed, n = 14, amp = 0.12) {
+  const r = mulberry32(seed);
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * 6.283;
+    const m = 1 + (r() - 0.5) * 2 * amp;
+    pts.push([cx + Math.cos(a) * rx * m, cy + Math.sin(a) * ry * m]);
+  }
+  return pts;
+}
+function pathPts(pts, jitter = 0, seed = 1) {
+  const r = mulberry32(seed);
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => {
+    const jx = (r() - 0.5) * jitter, jy = (r() - 0.5) * jitter;
+    i ? ctx.lineTo(x + jx, y + jy) : ctx.moveTo(x + jx, y + jy);
+  });
+  ctx.closePath();
+}
+// sketchy stroke: two slightly offset passes
+function sketchStroke(pts, seed, w = 1.6) {
+  ctx.strokeStyle = INK; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.lineWidth = w; pathPts(pts, 1.2, seed + boil()); ctx.stroke();
+  ctx.lineWidth = w * 0.5; pathPts(pts, 2.2, seed + 99 + boil()); ctx.stroke();
+}
+
+/* ---------- render ---------- */
+function render() {
+  const cam = car ? { x: car.x, y: car.y } : { x: 0, y: 0 };
+  if (state.mode === 'title') { cam.x = state.t * 40; cam.y = -state.t * 25; }
+  const sx = (Math.random() - 0.5) * shake, sy = (Math.random() - 0.5) * shake;
+  const OX = W / 2 - cam.x + sx, OY = H / 2 - cam.y * K + sy;
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+
+  const vis = visibleChunks(cam.x, cam.y);
+
+  /* ground layer (squashed plane) */
+  ctx.setTransform(DPR, 0, 0, DPR * K, DPR * OX, DPR * OY);
+  const gx0 = cam.x - W / 2 - 100, gy0 = cam.y - H / (2 * K) - 100;
+  if (IMG.ground) {
+    if (!IMG._groundPat) IMG._groundPat = ctx.createPattern(IMG.ground, 'repeat');
+    ctx.fillStyle = IMG._groundPat;
+  } else ctx.fillStyle = ST.ground;
+  ctx.fillRect(gx0, gy0, W + 200, H / K + 200);
+
+  for (const c of vis) for (const d of c.dunes) {
+    ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(d.a);
+    pathPts(wobblyPoly(0, 0, d.rx, d.ry, d.seed, 18, 0.2));
+    ctx.fillStyle = ST.light; ctx.globalAlpha = 0.55; ctx.fill();
+    pathPts(wobblyPoly(d.rx * 0.15, d.ry * 0.25, d.rx * 0.6, d.ry * 0.45, d.seed + 3, 14, 0.25));
+    ctx.fillStyle = ST.light; ctx.fill();
+    ctx.globalAlpha = 1; ctx.restore();
+  }
+  for (const c of vis) for (const d of c.decor) {
+    ctx.fillStyle = INK;
+    if (d.k === 'pebble') { ctx.beginPath(); ctx.ellipse(d.x, d.y, d.s, d.s * 0.8, 0, 0, 6.283); ctx.fill(); }
+  }
+  drawRoads(cam.x, cam.y);
+  // tire tracks
+  ctx.fillStyle = INK;
+  for (const t of tracks) {
+    ctx.globalAlpha = Math.min(1, t.life / 3) * (t.slide ? 0.75 : 0.4);
+    ctx.fillRect(t.x - 1.5, t.y - 1.5, 3, 3);
+  }
+  ctx.globalAlpha = 1;
+  // pits
+  for (const c of vis) for (const o of c.objs) if (o.type === 'pit') drawPit(o);
+  // shadows
+  for (const c of vis) for (const o of c.objs) {
+    if (destroyed.has(o.id) || (o.type !== 'cactus' && o.type !== 'boulder')) continue;
+    ctx.save(); ctx.globalAlpha = 0.9;
+    const sw = o.type === 'cactus' ? 1.1 : 1.25;
+    pathPts(wobblyPoly(o.x + o.r * 0.5, o.y + o.r * 0.4, o.r * sw + (o.type === 'cactus' ? o.h * 0.25 : 6), o.r * 0.9, o.seed + 5, 12, 0.12));
+    ctx.fillStyle = o.type === 'cactus' ? ST.dark : ST.mid; ctx.fill(); ctx.restore();
+  }
+  // bullets (on ground plane, slight height handled by offset)
+  ctx.strokeStyle = INK; ctx.lineCap = 'round';
+  if (!IMG.fx_bullet) for (const b of bullets) {
+    ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(b.px, b.py - (b.z || 12) / K); ctx.lineTo(b.x, b.y - (b.z || 12) / K); ctx.stroke();
+  }
+
+  /* upright layer (unsquashed, depth-sorted) */
+  ctx.setTransform(DPR, 0, 0, DPR, DPR * OX, DPR * OY);
+  // jump hills (drawn under everything that stands)
+  for (const c of vis) for (const o of c.objs) if (o.type === 'crater') drawCrater(o);
+  for (const c of vis) for (const o of c.objs) if (o.type === 'mound') drawMound(o);
+  // car shadow: only while airborne (on the ground the car's own tires sit on the sand).
+  // drawn with world-anchored stipple so the dots stay put on the ground instead of riding along
+  if (car && car.air && state.mode !== 'falling' && state.mode !== 'dead') {
+    const g = groundHeight(car.x, car.y), lift = Math.max(0, car.z - g);
+    if (lift > 6) {
+      const sh = Math.max(0.45, 1 - lift / 260), ca = Math.cos(car.a), sa = Math.sin(car.a);
+      const cx = car.x + lift * 0.25, cy = car.y * K - g + lift * 0.15;
+      ctx.beginPath();
+      [[-62, -25], [62, -25], [62, 25], [-62, 25]].forEach(([u, v], i) => {
+        const X = cx + (u * ca - v * sa) * sh, Y = cy + (u * sa + v * ca) * sh * K;
+        i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y);
+      });
+      ctx.closePath(); ctx.globalAlpha = Math.max(0.35, 1 - lift / 200); ctx.fillStyle = ST.dark; ctx.fill(); ctx.globalAlpha = 1;
+    }
+  }
+  // flat decals (scorch marks)
+  for (const d of decals) {
+    const w = 192 * d.s, h = 128 * d.s;
+    if (d.img === 'splat') {
+      if (IMG.splat) ctx.drawImage(IMG.splat, d.x - w / 2, d.y * K - h / 2, w, h);
+      else {
+        pathPts(wobblyPoly(d.x, d.y * K, w * 0.28, h * 0.22, d.seed, 16, 0.35)); ctx.fillStyle = ST.vdark; ctx.fill();
+        const r = mulberry32(d.seed); ctx.fillStyle = INK;
+        for (let i = 0; i < 14; i++) { const a = r() * 6.283, rr = w * (0.2 + r() * 0.3); ctx.beginPath(); ctx.ellipse(d.x + Math.cos(a) * rr, d.y * K + Math.sin(a) * rr * 0.55, 1.5 + r() * 3, 1 + r() * 2, 0, 0, 6.283); ctx.fill(); }
+      }
+    } else if (IMG.scorch) ctx.drawImage(IMG.scorch, d.x - w / 2, d.y * K - h / 2, w, h);
+  }
+  for (const n of npcs) {
+    if (IMG[n.kind]) continue;   // sprites carry their own shadow
+    const r = n.def.r * 1.1;
+    ctx.globalAlpha = 0.8; ctx.beginPath(); ctx.ellipse(n.x, n.y * K, r, r * 0.4, 0, 0, 6.283); ctx.fillStyle = ST.mid; ctx.fill(); ctx.globalAlpha = 1;
+  }
+  // critter shadows
+  for (const c of critters) {
+    if (c.kind === 'bigfoot') continue;   // sprite has its own shadow
+    const r = c.kind === 'tumbleweed' ? 20 * c.sc : c.kind === 'coyote' ? 22 : c.kind === 'roadrunner' ? 6 : 12;
+    ctx.globalAlpha = 0.8; ctx.beginPath(); ctx.ellipse(c.x, c.y * K, r * (1 - c.z / 60), r * 0.4 * (1 - c.z / 60), 0, 0, 6.283);
+    ctx.fillStyle = ST.mid; ctx.fill(); ctx.globalAlpha = 1;
+  }
+  drawParticles('dust');   // dust sits low, behind the car and props
+  const draw = [];
+  const OBJ_DRAW = { cactus: drawCactus, boulder: drawBoulder, ufo: drawUFO, missile: drawMissile, tnt: drawTNT, carcass: drawCarcass, sign: drawSign, vegas: drawVegas, leg: drawLeg, statue: drawStatue, airstream: drawAirstream, pylon: drawPylon };
+  for (const c of vis) for (const o of c.objs) {
+    if (o.type === 'pit' || o.type === 'mound' || o.type === 'crater' || o.type === 'block' || destroyed.has(o.id)) continue;
+    draw.push({ y: o.y, f: () => OBJ_DRAW[o.type](o) });
+  }
+  for (const c of critters) draw.push({ y: c.y, f: () => drawCritter(c) });
+  for (const n of npcs) draw.push({ y: n.y, f: () => drawNPC(n) });
+  for (const c of vis) for (const d of c.decor) if (d.k === 'scrub') draw.push({ y: d.y, f: () => drawScrub(d) });
+  for (const p of particles) if (p.k === 'stump') draw.push({ y: p.y - 1, f: () => drawStump(p) });
+  if (car && state.mode !== 'dead') draw.push({ y: car.y, f: drawCar });
+  if (car && state.mode === 'dead' && state.death === 'boom') draw.push({ y: car.y, f: drawWreck });
+  draw.sort((a, b) => a.y - b.y);
+  for (const d of draw) d.f();
+
+  // a car down in a crater sits behind the crater's near rim
+  if (car && state.mode !== 'dead') for (const c of vis) for (const o of c.objs) if (o.type === 'crater') drawCraterFront(o);
+  drawWires(cam.x, cam.y);
+  drawParticles('rest');
+  if (IMG.fx_bullet) for (const b of bullets) {
+    const sa = Math.atan2(b.vy * K, b.vx);
+    ctx.save(); ctx.translate(b.x, b.y * K - (b.z || 12)); ctx.rotate(sa);
+    ctx.drawImage(IMG.fx_bullet, -24, -3, 28, 7); ctx.restore();
+  }
+
+  /* HUD */
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawVignette();
+  drawHUD();
+}
+
+function drawPit(o) {
+  if (IMG.pit_0) { const S = o.r * 3.45; ctx.drawImage(IMG.pit_0, o.x - S / 2, o.y - S / 2, S, S); return; }
+  // halo of loose ground, darkening toward the hole
+  pathPts(wobblyPoly(o.x, o.y, o.r * 1.55, o.r * 1.45, o.seed, 20, 0.12)); ctx.fillStyle = ST.light; ctx.fill();
+  pathPts(wobblyPoly(o.x, o.y, o.r * 1.25, o.r * 1.2, o.seed + 1, 20, 0.12)); ctx.fillStyle = ST.mid; ctx.fill();
+  pathPts(wobblyPoly(o.x, o.y, o.r * 1.08, o.r * 1.05, o.seed + 2, 22, 0.1)); ctx.fillStyle = ST.vdark; ctx.fill();
+  const hole = wobblyPoly(o.x, o.y, o.r, o.r * 0.96, o.seed + 3, 24, 0.1);
+  pathPts(hole); ctx.fillStyle = INK; ctx.fill();
+  sketchStroke(hole, o.seed);
+  // inner cliff face: lighter stipple near the top lip (seen from 3/4 view)
+  ctx.save(); pathPts(hole); ctx.clip();
+  pathPts(wobblyPoly(o.x, o.y + o.r * 0.25, o.r * 0.95, o.r * 0.85, o.seed + 4, 20, 0.12));
+  ctx.fillStyle = INK; ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
+  // a few cracks radiating out
+  const r = mulberry32(o.seed + 9);
+  ctx.strokeStyle = INK; ctx.lineWidth = 1.2;
+  for (let i = 0; i < 5; i++) {
+    const a = r() * 6.283; let x = o.x + Math.cos(a) * o.r, y = o.y + Math.sin(a) * o.r;
+    ctx.beginPath(); ctx.moveTo(x, y);
+    for (let s = 0; s < 3; s++) { x += Math.cos(a + (r() - 0.5)) * 12; y += Math.sin(a + (r() - 0.5)) * 12; ctx.lineTo(x, y); }
+    ctx.stroke();
+  }
+}
+
+function drawCactus(o) {
+  const x = o.x, y = o.y * K;
+  const img = IMG['cactus_' + o.variant];
+  if (img) {
+    const pad = img.pad || 0, sw = img.srcW || img.width, shh = img.srcH || img.height;
+    const h = o.h * 1.4, s = h / shh, w = sw * s;
+    ctx.drawImage(img, x - w / 2 - pad * s, y - h + 6 - pad * s, img.width * s, img.height * s);
+    return;
+  }
+  const h = o.h, w = 13;
+  const r = mulberry32(o.seed);
+  const parts = [];
+  parts.push([x - w / 2, y - h, w, h, w / 2]);
+  const arms = 1 + ((r() * 2) | 0) + (o.variant === 2 ? 1 : 0);
+  for (let i = 0; i < arms; i++) {
+    const side = (i % 2 ? 1 : -1) * (r() < 0.5 ? 1 : -1);
+    const ay = y - h * (0.35 + r() * 0.35), len = 14 + r() * 8, up = 14 + r() * 20;
+    parts.push(side > 0 ? [x + w / 2 - 2, ay - 8, len, 9, 4.5] : [x - w / 2 - len + 2, ay - 8, len, 9, 4.5]);
+    parts.push(side > 0 ? [x + w / 2 + len - 11, ay - up - 4, 10, up + 4, 5] : [x - w / 2 - len + 1, ay - up - 4, 10, up + 4, 5]);
+  }
+  for (const p of parts) {
+    ctx.beginPath(); ctx.roundRect(p[0], p[1], p[2], p[3], p[4]);
+    ctx.fillStyle = PAPER; ctx.fill();
+    // right-side shading
+    ctx.save(); ctx.clip();
+    ctx.fillStyle = ST.mid; ctx.fillRect(p[0] + p[2] * 0.55, p[1], p[2], p[3]);
+    ctx.fillStyle = ST.dark; ctx.fillRect(p[0] + p[2] * 0.8, p[1], p[2], p[3]);
+    ctx.restore();
+  }
+  ctx.strokeStyle = INK; ctx.lineWidth = 1.6;
+  const j = boil();
+  for (const p of parts) {
+    ctx.beginPath(); ctx.roundRect(p[0] + (j - 1) * 0.4, p[1], p[2], p[3], p[4]); ctx.stroke();
+  }
+  // ribs
+  ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(x - 1, y - h + 6); ctx.lineTo(x - 1, y - 2); ctx.moveTo(x + 3, y - h + 7); ctx.lineTo(x + 3, y - 2); ctx.stroke();
+  // spines
+  ctx.lineWidth = 0.7;
+  for (let i = 0; i < 10; i++) {
+    const sy = y - h + 6 + r() * (h - 8), s = r() < 0.5 ? -1 : 1;
+    ctx.beginPath(); ctx.moveTo(x + s * w / 2, sy); ctx.lineTo(x + s * (w / 2 + 3), sy - 2); ctx.stroke();
+  }
+}
+
+function drawMound(o) {
+  if (o.sc) {
+    const img = IMG['pyramid_' + o.variant], S = PYR.s * o.sc;
+    const x = o.x, ytop = o.y * K - PYR.H * o.sc;
+    if (img) { ctx.drawImage(img, x - PYR.ax[o.variant] * S, ytop - PYR.ay[o.variant] * S, img.width * S, img.height * S); return; }
+    const c = o.sc, P = (wx, wy, z) => [o.x + wx * c, (o.y + wy * c) * K - z * c];
+    const T = [P(-PYR.Tx, -PYR.Ty, PYR.H), P(PYR.Tx, -PYR.Ty, PYR.H), P(PYR.Tx, PYR.Ty, PYR.H), P(-PYR.Tx, PYR.Ty, PYR.H)];
+    const B = [P(-PYR.Bx, -PYR.By, 0), P(PYR.Bx, -PYR.By, 0), P(PYR.Bx, PYR.By, 0), P(-PYR.Bx, PYR.By, 0)];
+    const quad = (q, fill) => { ctx.beginPath(); q.forEach(([a, b], i) => i ? ctx.lineTo(a, b) : ctx.moveTo(a, b)); ctx.closePath(); ctx.fillStyle = PAPER; ctx.fill(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } ctx.strokeStyle = INK; ctx.lineWidth = 1.4; ctx.stroke(); };
+    quad([B[0], B[3], T[3], T[0]], ST.light); quad([B[1], B[2], T[2], T[1]], ST.dark); quad([B[3], B[2], T[2], T[3]], ST.mid); quad(T, null);
+    return;
+  }
+  const x = o.x, y = o.y * K, R = o.r, ry = o.r * K, H = o.h;
+  const img = IMG['mound_' + o.variant];
+  if (img) {
+    // stretch the art so its left/right edges match the footprint and its peak/front edge match the physics
+    const A = MOUND_ART[o.variant];
+    const sx = 2 * R / (A.r - A.l), sy = (H + ry) / (A.front - A.peak);
+    ctx.drawImage(img, x - R - A.l * sx, y - H - A.peak * sy, img.width * sx, img.height * sy);
+    return;
+  }
+  // stacked contour rings rising to a peak; stipple builds up on the lower-right of each
+  const rings = 6;
+  for (let i = 0; i < rings; i++) {
+    const f = i / rings, rr = R * (1 - f * 0.92), rry = ry * (1 - f * 0.92), cy = y - H * f;
+    const shape = wobblyPoly(x, cy, rr, rry, o.seed + i, 18, 0.07);
+    pathPts(shape); ctx.fillStyle = PAPER; ctx.fill();
+    ctx.save(); pathPts(shape); ctx.clip();
+    ctx.fillStyle = i < 2 ? ST.mid : ST.light; ctx.fill();
+    pathPts(wobblyPoly(x - rr * 0.22, cy - rry * 0.28, rr * 0.92, rry * 0.88, o.seed + 40 + i, 16, 0.08)); ctx.fillStyle = PAPER; ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = i === 0 ? 1 : 0.45; sketchStroke(shape, o.seed + i, i === 0 ? 1.7 : 1); ctx.globalAlpha = 1;
+  }
+  // packed-dirt lip at the peak + tire ruts down the front
+  const lip = wobblyPoly(x, y - H, R * 0.12, ry * 0.12, o.seed + 9, 10, 0.2);
+  pathPts(lip); ctx.fillStyle = ST.dark; ctx.fill(); sketchStroke(lip, o.seed + 9, 1.2);
+  ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.globalAlpha = 0.6;
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + s * 5, y - H + 4); ctx.quadraticCurveTo(x + s * 9, y - H * 0.4, x + s * 12, y + ry * 0.85); ctx.stroke(); }
+  ctx.globalAlpha = 1;
+}
+
+function drawCrater(o, clip) {
+  const A = CRATER_ART[o.variant], img = IMG['crater_' + o.variant];
+  const x = o.x, y = o.y * K;
+  if (img) { ctx.drawImage(img, x - A.cx * A.sx, y - A.cy * A.sy, img.width * A.sx, img.height * A.sy); return; }
+  // placeholder: rim ring + dark bowl
+  ctx.beginPath(); ctx.ellipse(x, y, A.Ro, A.Ro * K, 0, 0, 6.283); ctx.fillStyle = PAPER; ctx.fill(); ctx.fillStyle = ST.light; ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x, y - A.Hr, A.Rr, A.crestRy * A.sy, 0, 0, 6.283); ctx.fillStyle = ST.mid; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.stroke();
+}
+function drawCraterFront(o) {
+  const A = CRATER_ART[o.variant];
+  const d = Math.hypot(car.x - o.x, car.y - o.y);
+  if (d > A.Rr || car.y < o.y - A.Rr * 0.2 || car.z > A.Hr + 4) return;
+  const x = o.x, y = o.y * K, cyc = y - A.Hr, ry = A.crestRy * A.sy;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x - A.Ro - 20, cyc, (A.Ro + 20) * 2, A.Ro * 2);      // the front half of the crater...
+  ctx.ellipse(x, cyc, A.Rr, ry, 0, 0, 6.283);                     // ...minus the bowl opening
+  ctx.clip('evenodd');
+  drawCrater(o);
+  ctx.restore();
+}
+function drawAirstream(o) {
+  const A = AIRSTREAM_ART, img = IMG.airstream, x = o.x, y = o.y * K, S = A.s;
+  if (img) { ctx.drawImage(img, x - A.cx * S, y - A.cy * S, img.width * S, img.height * S); return; }
+  ctx.beginPath(); ctx.ellipse(x, y, A.Ro, A.Ro * K, 0, 0, 6.283); ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.setLineDash([4, 6]); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.roundRect(x - 90, y - 70, 160, 60, 28); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
+}
+function drawPylon(o) {
+  const img = IMG['pylon_' + o.variant], S = PYLON_ART.scale, [bx, by] = PYLON_ART.base[o.variant];
+  const x = o.x, y = o.y * K;
+  if (img) { ctx.drawImage(img, x - bx * S, y - by * S, img.width * S, img.height * S); return; }
+  ctx.strokeStyle = INK; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x - 30, y); ctx.lineTo(x, y - 260); ctx.lineTo(x + 30, y); ctx.stroke();
+}
+function drawSign(o) {
+  const img = IMG[o.art], A = SIGN_ART[o.art], x = o.x, y = o.y * K;
+  if (!img) { ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 50); ctx.stroke(); ctx.strokeRect(x - 14, y - 70, 28, 22); return; }
+  const S = SIGN_S, pad = img.pad || 0;
+  ctx.drawImage(img, x - (A[0] + pad) * S, y - (A[1] + pad) * S, img.width * S, img.height * S);
+}
+function drawLeg(o) {
+  const img = IMG.eiffel_legs, x = o.x, y = o.y * K, S = EIFFEL.s, [bx, by] = EIFFEL.base[o.variant];
+  if (!img) { ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.strokeRect(x - 40, y - 200, 80, 200); return; }
+  ctx.drawImage(img, o.variant * 256, 0, 256, 320, x - bx * S, y - by * S, 256 * S, 320 * S);
+}
+function drawStatue(o) {
+  const img = IMG['statue_' + o.variant], x = o.x, y = o.y * K, S = STATUE.s;
+  if (!img) { ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.strokeRect(x - 20, y - 170, 40, 170); return; }
+  ctx.drawImage(img, x - STATUE.bx[o.variant] * S, y - STATUE.by[o.variant] * S, img.width * S, img.height * S);
+}
+function drawVegas(o) {
+  const img = IMG.sign_vegas, x = o.x, y = o.y * K, S = VEGAS.s;
+  if (!img) { ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.strokeRect(x - 70, y - 200, 140, 90); return; }
+  ctx.drawImage(img, x - VEGAS.bx * S, y - VEGAS.by * S, img.width * S, img.height * S);
+}
+function drawCarcass(o) {
+  const img = IMG['carcass_' + o.variant], x = o.x, y = o.y * K, S = 0.765;
+  if (img) { ctx.drawImage(img, x - 96 * S, y - 112 * S, 192 * S, 128 * S); return; }
+  ctx.beginPath(); ctx.roundRect(x - 40, y - 30, 80, 30, 6); ctx.fillStyle = PAPER; ctx.fill(); ctx.fillStyle = ST.mid; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.stroke();
+}
+// sagging wires between neighbouring standing towers; a broken tower drops its wires to the sand
+function drawWires(camX, camY) {
+  const S = PYLON_ART.scale, tips = PYLON_ART.tips;
+  const k0 = Math.floor((camY - H / K) / TOWER_GAP) - 1, k1 = Math.ceil((camY + H / K) / TOWER_GAP) + 1;
+  ctx.strokeStyle = INK; ctx.lineWidth = 1.1; ctx.lineCap = 'round';
+  for (let i = Math.floor((camX - W) / LINE_GAP); i <= Math.floor((camX + W) / LINE_GAP); i++) {
+    if (!powerLine(i)) continue;
+    for (let k = k0; k < k1; k++) {
+      const A = tower(i, k), B = tower(i, k + 1);
+      const okA = A.variant === 0 && !(Math.hypot(A.x, A.y) < 300), okB = B.variant === 0 && !(Math.hypot(B.x, B.y) < 300);
+      if (!okA && !okB) continue;
+      const aOnRoad = roadAt(A.x, A.y, 40), bOnRoad = roadAt(B.x, B.y, 40);
+      const standA = okA && !aOnRoad, standB = okB && !bOnRoad;
+      if (!standA && !standB) continue;
+      for (const [tx, ty] of tips) {
+        const ax = A.x + tx * S, ay = A.y * K + ty * S, bx = B.x + tx * S, by = B.y * K + ty * S;
+        ctx.beginPath();
+        if (standA && standB) {
+          ctx.moveTo(ax, ay); ctx.quadraticCurveTo((ax + bx) / 2, (ay + by) / 2 + 70, bx, by);
+        } else if (standA) {     // snapped: hangs from A down to the ground part way to B
+          const gx = A.x + (B.x - A.x) * 0.45 + tx * 0.6, gy = (A.y + (B.y - A.y) * 0.45) * K;
+          ctx.moveTo(ax, ay); ctx.quadraticCurveTo(ax + (gx - ax) * 0.3, gy, gx, gy);
+        } else {
+          const gx = B.x + (A.x - B.x) * 0.45 + tx * 0.6, gy = (B.y + (A.y - B.y) * 0.45) * K;
+          ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx + (gx - bx) * 0.3, gy, gx, gy);
+        }
+        ctx.stroke();
+      }
+    }
+  }
+}
+/* road textures, pre-dissolved into 9 stipple levels so a road can fade into sand pixel by pixel.
+   intact asphalt is backed with white so the ground dots don't show through it. */
+let ROADTEX = null;
+function prepRoadTex() {
+  if (!IMG.road_0 || !IMG.road_1) return null;
+  const make = (img, y0, y1, backX0, backX1, seed) => {
+    const w = img.width, h = y1 - y0;
+    const base = document.createElement('canvas'); base.width = w; base.height = h;
+    const g = base.getContext('2d');
+    if (backX1 > backX0) { g.fillStyle = PAPER; g.fillRect(backX0, 0, backX1 - backX0, h); }
+    g.drawImage(img, 0, y0, w, h, 0, 0, w, h);
+    const levels = [];
+    let px = null;
+    try { px = g.getImageData(0, 0, w, h); } catch (e) { px = null; }
+    const rnd = mulberry32(seed);
+    const noise = new Float32Array(w * h); for (let q = 0; q < noise.length; q++) noise[q] = rnd();
+    for (let L = 0; L <= 8; L++) {
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const cg = c.getContext('2d');
+      if (px) {
+        const d = new ImageData(new Uint8ClampedArray(px.data), w, h), a = d.data, keep = L / 8;
+        for (let q = 0; q < noise.length; q++) if (noise[q] >= keep) a[q * 4 + 3] = 0;
+        cg.putImageData(d, 0, 0); c.alpha = 1;
+      } else { cg.drawImage(base, 0, 0); c.alpha = L / 8; }   // no pixel access (opened from disk): plain fade
+      levels.push(c);
+    }
+    return { levels, h };
+  };
+  return { intact: make(IMG.road_0, 0, 512, 44, 212, 11), buried: make(IMG.road_1, 40, 472, 0, 0, 23) };
+}
+// roads are painted once into cached 512px ground tiles (thin strips following the curve, so bends have
+// no seams), then each frame just draws the few tiles on screen
+const RT = 512, RT_RES = 1.25, roadTiles = new Map();
+function roadTile(tx, ty) {
+  const key = tx + ',' + ty;
+  if (roadTiles.has(key)) return roadTiles.get(key);
+  const ox = tx * RT, oy = ty * RT, pad = ROAD_W;
+  const roads = roadsNear(ox + RT / 2, oy + RT / 2).filter(R => !(R.x1 < ox || R.x0 > ox + RT || R.y1 < oy || R.y0 > oy + RT));
+  let c = null;
+  if (roads.length) {
+    c = document.createElement('canvas'); c.width = c.height = RT * RT_RES;
+    const g = c.getContext('2d');
+    g.setTransform(RT_RES, 0, 0, RT_RES, -ox * RT_RES, -oy * RT_RES);
+    const SRC = 256 / ROAD_W;
+    let any = false;
+    for (const R of roads) for (const p of R.pts) {
+      if (p.x < ox - pad || p.x > ox + RT + pad || p.y < oy - pad || p.y > oy + RT + pad || p.end <= 0.02) continue;
+      any = true;
+      g.save(); g.translate(p.x, p.y); g.rotate(p.h - Math.PI / 2);
+      const layer = (T, keep) => {
+        const L = Math.round(keep * 8); if (L <= 0) return;
+        const t = T.levels[L], hs = ROAD_DS * SRC + 1.5;
+        let v = (p.d * SRC) % (2 * T.h); if (v > T.h) v = 2 * T.h - v; v = Math.min(v, T.h - hs);   // ping-pong: no wrap seam
+        if (t.alpha !== 1) g.globalAlpha = t.alpha;
+        g.drawImage(t, 0, v, 256, hs, -ROAD_W / 2, -ROAD_DS / 2 - 0.6, ROAD_W, ROAD_DS + 1.2);
+        g.globalAlpha = 1;
+      };
+      layer(ROADTEX.buried, p.end * Math.min(1, p.bur * 2));
+      layer(ROADTEX.intact, p.end * (1 - p.bur));
+      g.restore();
+    }
+    if (!any) c = null;
+  }
+  roadTiles.set(key, c);
+  return c;
+}
+function drawRoads(camX, camY) {
+  if (!ROADTEX) { ROADTEX = prepRoadTex(); if (!ROADTEX) return; roadTiles.clear(); }
+  const x0 = Math.floor((camX - W / 2 - 50) / RT), x1 = Math.floor((camX + W / 2 + 50) / RT);
+  const y0 = Math.floor((camY - H / K / 2 - 50) / RT), y1 = Math.floor((camY + H / K / 2 + 50) / RT);
+  for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
+    const c = roadTile(tx, ty);
+    if (c) ctx.drawImage(c, tx * RT, ty * RT, RT, RT);
+  }
+  if (roadTiles.size > 120) for (const k of roadTiles.keys()) {        // forget far-away tiles
+    const [a, b] = k.split(',').map(Number);
+    if (Math.abs(a - (x0 + x1) / 2) > 6 || Math.abs(b - (y0 + y1) / 2) > 6) roadTiles.delete(k);
+  }
+}
+
+function drawUFO(o) {
+  const x = o.x, y = o.y * K;
+  if (IMG.ufo) { ctx.drawImage(IMG.ufo, x - 150, y - 288, 320, 320); return; }
+  ctx.beginPath(); ctx.ellipse(x, y - 30, 110, 40, -0.15, 0, 6.283); ctx.fillStyle = PAPER; ctx.fill(); ctx.fillStyle = ST.mid; ctx.fill();
+  ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(x, y - 55, 45, 30, -0.15, Math.PI, 0); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
+}
+function drawMissile(o) {
+  const x = o.x, y = o.y * K;
+  if (IMG.missile) { const s = 0.8; ctx.drawImage(IMG.missile, o.variant * 128, 0, 128, 192, x - 64 * s, y - 175 * s, 128 * s, 192 * s); return; }
+  ctx.save(); ctx.translate(x, y); ctx.rotate(o.variant ? -0.5 : 0.35);
+  ctx.beginPath(); ctx.roundRect(-8, -80, 16, 80, 6); ctx.fillStyle = PAPER; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1.8; ctx.stroke();
+  ctx.restore();
+}
+function drawTNT(o) {
+  const x = o.x, y = o.y * K;
+  if (IMG.tnt) { const s = 0.72; ctx.drawImage(IMG.tnt, x - 46 * s, y - 92 * s, 96 * s, 96 * s); return; }
+  ctx.beginPath(); ctx.rect(x - 22, y - 40, 44, 40); ctx.fillStyle = PAPER; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke();
+  stamp('TNT', x, y - 20, 14);
+}
+function drawWreck() {
+  const x = car.x, y = car.y * K;
+  if (!IMG.car_wreck || state.deadT < 0.25) return;   // appears once the fireball covers the car
+  const flip = Math.cos(car.a) < 0;
+  ctx.save(); ctx.translate(x, y - 8); if (flip) ctx.scale(-1, 1);
+  ctx.drawImage(IMG.car_wreck, -59, -64, 118, 118); ctx.restore();
+}
+function drawCritter(c) {
+  const x = c.x, y = c.y * K - c.z - groundHeight(c.x, c.y);
+  if (c.kind === 'tumbleweed') {
+    const S = 64 * c.sc;
+    if (IMG.tumbleweed) {
+      const f = ((Math.floor(c.roll) % 4) + 4) % 4;
+      ctx.drawImage(IMG.tumbleweed, f * 64, 0, 64, 64, x - S / 2, y - S + 4, S, S);
+    } else {
+      ctx.save(); ctx.translate(x, y - S / 2); ctx.rotate(c.roll); ctx.strokeStyle = INK; ctx.lineWidth = 1;
+      ctx.beginPath(); for (let i = 0; i < 8; i++) { ctx.moveTo(0, 0); ctx.arc(0, 0, S * 0.4, i, i + 1.6); } ctx.stroke(); ctx.restore();
+    }
+    return;
+  }
+  const img = IMG[c.kind];
+  if (!img) return;
+  let f;
+  if (c.kind === 'jackalope') {
+    if (c.state === 'move') f = c.phase < 0.15 ? 2 : c.phase < 0.4 ? 3 : c.phase < 0.75 ? 4 : 5;
+    else f = (c.pose < 0.5 && Math.floor(state.t * 2 + c.x) % 5 === 0) ? 1 : 0;
+  } else if (c.kind === 'coyote') {  // 0 stand, 1 sniff, 2 sit, 3 howl, 4-7 run
+    if (c.state === 'move') f = 4 + Math.floor(c.phase * 4) % 4;
+    else f = c.pose < 0.4 ? 0 : c.pose < 0.7 ? 1 : c.pose < 0.9 ? 2 : 3;
+  }
+  if (c.kind === 'bigfoot') {  // 0 stand, 1 scratch, 2-5 walk, 6 wave, 7 flex
+    f = c.state === 'move' ? 2 + Math.floor(c.phase * 4) % 4 : c.state === 'wave' ? 6 : c.state === 'flex' ? 7 : c.state === 'scratch' ? 1 : 0;
+    ctx.save(); ctx.translate(x, y); if (c.face < 0) ctx.scale(-1, 1);
+    const s = 0.72;   // body height matched to the flame bison
+    ctx.drawImage(img, f * 96, 0, 96, 128, -48 * s, -122 * s, 96 * s, 128 * s); ctx.restore(); return;
+  }
+  if (c.kind === 'roadrunner') { // 0 stand, 1 bob, 2 tail flick, 3 crouch, 4-7 sprint
+    if (c.state === 'run') f = 4 + Math.floor(c.phase * 4) % 4;
+    else if (c.state === 'crouch') f = 3;
+    else if (c.state === 'walk') f = Math.floor(c.phase * 2) % 2;
+    else f = (c.pose || 0) < 0.3 ? 2 : Math.floor(state.t * 2.5 + c.x) % 3 === 0 ? 1 : 0;
+  }
+  const fw = c.kind === 'coyote' ? 96 : 64, fh = 64;
+  const sc = c.kind === 'jackalope' ? 0.85 : c.kind === 'roadrunner' ? 0.5 : 1;
+  ctx.save(); ctx.translate(x, y); if (c.face < 0) ctx.scale(-1, 1); ctx.scale(sc, sc);
+  ctx.drawImage(img, f * fw, 0, fw, fh, -fw / 2, -fh + 4, fw, fh);
+  ctx.restore();
+}
+
+function npcFrame(n) {
+  const run = Math.floor(n.phase * (n.kind === 'buffalo' ? 6 : 4));
+  const idle = Math.floor(state.t * 2 + n.seed) % 2;
+  if (n.kind === 'zombie') return n.state === 'lunge' ? 6 + idle : n.state === 'move' ? 2 + run : idle;
+  if (n.kind === 'alien') return n.state === 'hiss' ? 6 + idle : n.state === 'move' ? 2 + run : idle;
+  return n.state === 'charge' || (n.wander && n.state === 'idle') ? 2 + run : idle;   // buffalo
+}
+function drawNPC(n) {
+  const D = n.def, x = n.x + (n.hitT > 0 ? (Math.random() - 0.5) * 4 : 0), y = n.y * K - groundHeight(n.x, n.y);
+  ctx.save(); ctx.translate(x, y); if (n.face < 0) ctx.scale(-1, 1);
+  const img = IMG[n.kind];
+  if (img) {
+    ctx.drawImage(img, npcFrame(n) * D.fw, 0, D.fw, D.fh, -D.fw / 2, -D.fh + 4, D.fw, D.fh);
+  } else if (n.kind === 'zombie') drawZombiePH(n);
+  else if (n.kind === 'alien') drawAlienPH(n);
+  else drawBuffaloPH(n);
+  ctx.restore();
+}
+// --- placeholder figures (drawn facing right, origin at feet) ---
+function inkLine(pts, w = 1.6) { ctx.strokeStyle = INK; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath(); pts.forEach(([a, b], i) => i ? ctx.lineTo(a, b) : ctx.moveTo(a, b)); ctx.stroke(); }
+function blob(cx, cy, rx, ry, shade, rot = 0) { ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, rot, 0, 6.283); ctx.fillStyle = PAPER; ctx.fill(); if (shade) { ctx.fillStyle = shade; ctx.fill(); } ctx.strokeStyle = INK; ctx.lineWidth = 1.6; ctx.stroke(); }
+function drawZombiePH(n) {
+  const sw = n.state !== 'idle' ? Math.sin(n.phase * 6.283) * 7 : Math.sin(state.t * 2 + n.seed) * 1.5;
+  inkLine([[-2, -30], [-4 - sw, -14], [-6 - sw, 0]], 2.4);
+  inkLine([[2, -30], [3 + sw, -15], [5 + sw, 0]], 2.4);
+  blob(0, -42, 9, 15, ST.light, 0.25);
+  const reach = n.state === 'lunge' ? 10 : 0;
+  inkLine([[4, -50], [18 + reach, -46], [26 + reach, -44]], 2);
+  inkLine([[-2, -50], [12 + reach, -42], [20 + reach, -40]], 2);
+  blob(8, -60, 7, 7, ST.mid);
+  ctx.fillStyle = INK; ctx.fillRect(10, -62, 2.5, 2.5);
+  inkLine([[-6, -38], [6, -34], [-4, -30]], 1);   // torn shirt
+}
+function drawAlienPH(n) {
+  const sw = n.state === 'move' ? Math.sin(n.phase * 6.283) * 8 : 0;
+  inkLine([[-2, -28], [-8 - sw, -14], [-4 - sw, 0]], 1.8);
+  inkLine([[2, -28], [8 + sw, -14], [6 + sw, 0]], 1.8);
+  blob(0, -38, 6, 14, ST.mid, 0.2);
+  inkLine([[2, -46], [12, -34], [10, -22], [15, -18]], 1.4);
+  inkLine([[-2, -46], [-8, -32], [-4, -20]], 1.4);
+  inkLine([[-6, -30], [-18, -26], [-28, -34], [-32, -44]], 1.2);  // tail
+  blob(-2, -62, 9, 13, ST.light, -0.9);        // long xeno dome
+  blob(6, -58, 7, 8, null);                     // gray face
+  ctx.fillStyle = INK; ctx.beginPath(); ctx.ellipse(9, -59, 2.5, 4, 0.5, 0, 6.283); ctx.fill();
+  if (n.state === 'hiss') inkLine([[10, -52], [14, -48], [10, -47]], 1.4);
+}
+function drawBuffaloPH(n) {
+  const sw = n.state === 'charge' || n.wander ? Math.sin(n.phase * 6.283) * 9 : 0;
+  for (const [lx, s] of [[-22, 1], [-14, -1], [16, 1], [24, -1]]) inkLine([[lx, -34], [lx + sw * s * 0.6, -16], [lx + sw * s, 0]], 2.2);
+  // spine & ribs
+  inkLine([[-30, -40], [-10, -46], [14, -50], [28, -44]], 2.4);
+  for (let i = 0; i < 6; i++) { const rx = -18 + i * 7; inkLine([[rx, -46 + i * 0.5], [rx - 4, -36], [rx + 2, -28]], 1.4); }
+  // skull + horns
+  blob(36, -40, 10, 8, ST.light, 0.3);
+  ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(38, -42, 2.5, 0, 6.283); ctx.fill();
+  inkLine([[32, -46], [28, -56], [34, -60]], 2.4);
+  inkLine([[40, -46], [46, -54], [42, -60]], 2.4);
+  // flames along the back
+  const f = state.t * 9 + n.seed;
+  ctx.beginPath();
+  for (let i = 0; i <= 8; i++) {
+    const fx = -30 + i * 7.5, fh = 10 + Math.abs(Math.sin(f + i * 1.7)) * 16;
+    ctx.lineTo(fx, -46 - (i % 2 ? fh : 4));
+  }
+  ctx.strokeStyle = INK; ctx.lineWidth = 1.3; ctx.stroke();
+}
+
+function drawStump(p) {
+  const x = p.x, y = p.y * K;
+  ctx.globalAlpha = Math.min(1, p.life / 3);
+  ctx.beginPath(); ctx.roundRect(x - 6, y - 9, 12, 10, 3);
+  ctx.fillStyle = PAPER; ctx.fill(); ctx.fillStyle = ST.mid; ctx.fill();
+  ctx.strokeStyle = INK; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(x - 6, y); ctx.lineTo(x - 6, y - 8); ctx.lineTo(x - 3, y - 11); ctx.lineTo(x, y - 7); ctx.lineTo(x + 3, y - 12); ctx.lineTo(x + 6, y - 8); ctx.lineTo(x + 6, y); ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawBoulder(o) {
+  const x = o.x, y = o.y * K;
+  const img = IMG['boulder_' + o.variant];
+  if (img) { const w = o.r * 2.6, h = w * img.height / img.width; ctx.drawImage(img, x - w / 2, y - h + o.r * 0.5, w, h); return; }
+  const rx = o.r * 1.15, ry = o.r * 0.95;
+  const cy = y - ry * 0.55;
+  const outline = wobblyPoly(x, cy, rx, ry, o.seed, 9, 0.18);
+  // flatten the bottom so it sits on the ground
+  for (const p of outline) if (p[1] > y + ry * 0.1) p[1] = y + ry * 0.1 + (p[1] - y - ry * 0.1) * 0.3;
+  pathPts(outline); ctx.fillStyle = PAPER; ctx.fill();
+  ctx.save(); pathPts(outline); ctx.clip();
+  // light from upper-left: stipple builds toward lower-right
+  pathPts(wobblyPoly(x + rx * 0.35, cy + ry * 0.35, rx * 0.9, ry * 0.8, o.seed + 1, 10, 0.15)); ctx.fillStyle = ST.light; ctx.fill();
+  pathPts(wobblyPoly(x + rx * 0.6, cy + ry * 0.55, rx * 0.65, ry * 0.6, o.seed + 2, 10, 0.15)); ctx.fillStyle = ST.mid; ctx.fill();
+  pathPts(wobblyPoly(x + rx * 0.8, cy + ry * 0.8, rx * 0.45, ry * 0.4, o.seed + 3, 10, 0.15)); ctx.fillStyle = ST.dark; ctx.fill();
+  ctx.restore();
+  sketchStroke(outline, o.seed, 1.8);
+  // facet / crack lines
+  const r = mulberry32(o.seed + 7);
+  ctx.lineWidth = 1; ctx.beginPath();
+  let px = x - rx * 0.3 + r() * rx * 0.3, py = cy - ry * 0.7;
+  ctx.moveTo(px, py);
+  for (let i = 0; i < 3; i++) { px += (r() - 0.3) * rx * 0.3; py += ry * 0.35; ctx.lineTo(px, py); }
+  ctx.stroke();
+}
+
+function drawScrub(d) {
+  const x = d.x, y = d.y * K, r = mulberry32(d.seed);
+  ctx.strokeStyle = INK; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = -Math.PI / 2 + (r() - 0.5) * 2.2, l = 4 + r() * 6 * d.s;
+    ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+  }
+  ctx.stroke();
+}
+
+function drawCar() {
+  const x = car.x, y = car.y * K - car.z;
+  let scale = 1 + Math.max(0, car.z - groundHeight(car.x, car.y)) / 600, a = car.a;
+  if (state.mode === 'falling') { scale = Math.max(0, 1 - car.fall / 1.1); a += car.spin; }
+  if (car.air) a += Math.sin(car.airT * 3) * 0.04;   // slight wobble in flight
+  if (scale <= 0.01) return;
+
+  // optional real sprites
+  if (IMG.car_sheet) {
+    const frames = 8, fw = IMG.car_sheet.width / frames, fh = IMG.car_sheet.height;
+    // screen-space heading (3/4 squash), 0 = north, clockwise
+    const sa = Math.atan2(Math.sin(a) * K, Math.cos(a)) + Math.PI / 2;
+    const step = Math.PI * 2 / frames;
+    const fi = Math.round(sa / step);
+    const f = ((fi % frames) + frames) % frames;
+    const resid = sa - fi * step;           // rotate the nearest frame by the leftover angle
+    const S = 118 * scale;
+    ctx.save(); ctx.translate(x, y - 6 * scale); ctx.rotate(resid);
+    ctx.drawImage(IMG.car_sheet, f * fw, 0, fw, fh, -S / 2, -S / 2, S, S * fh / fw);
+    ctx.restore();
+    return;
+  }
+  if (IMG.car_topdown) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale * K); ctx.rotate(a + Math.PI / 2);
+    ctx.drawImage(IMG.car_topdown, -40, -40, 80, 80); ctx.restore();
+    return;
+  }
+
+  drawCar3D(car.x, car.y, car.z, a, scale);
+}
+
+/* ---------- solid 3D car: convex parts, back faces culled, painter-sorted ---------- */
+// model space: +x forward, +y right side, +z up. units = world pixels
+function box(x0, x1, y0, y1, z0, z1, tag) {
+  return frustum([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], z0, z1, tag);
+}
+// prism / frustum: bottom polygon at z0, top polygon at z1 (same vertex count, counter-clockwise seen from above)
+function frustum(bot, top, z0, z1, tag) {
+  const n = bot.length, v = [];
+  for (const [x, y] of bot) v.push([x, y, z0]);
+  for (const [x, y] of top) v.push([x, y, z1]);
+  const faces = [{ i: [...Array(n).keys()].reverse(), k: 'bottom' }, { i: [...Array(n).keys()].map(k => k + n), k: 'top' }];
+  for (let k = 0; k < n; k++) { const k2 = (k + 1) % n; faces.push({ i: [k, k2, k2 + n, k + n], k: 'side', side: k }); }
+  return { v, faces, tag };
+}
+function pyramid(base, tip, tag) {   // base: array of [x,y,z], tip: [x,y,z]
+  const v = [...base, tip], n = base.length, faces = [{ i: [...Array(n).keys()].reverse(), k: 'base' }];
+  for (let k = 0; k < n; k++) faces.push({ i: [k, (k + 1) % n, n], k: 'side' });
+  return { v, faces, tag };
+}
+let CAR_MODEL = null;
+function buildCarModel() {
+  const P = [];
+  // front axle: one pair of chunky tires
+  for (const [y0, y1] of [[-26, -18], [18, 26]]) P.push(box(17, 33, y0, y1, 0, 15, 'tire'));
+  // rear: tank treads (long track + drive sprocket housing)
+  for (const [y0, y1] of [[-28, -18], [18, 28]]) {
+    P.push(frustum([[-62, y0], [-6, y0], [-6, y1], [-62, y1]], [[-58, y0], [-10, y0], [-10, y1], [-58, y1]], 0, 15, 'tread'));
+    P.push(box(-56, -14, y0 + 1, y1 - 1, 15, 17, 'treadtop'));
+  }
+  // lower hull under the cab
+  P.push(frustum([[-28, -20], [36, -20], [36, 20], [-28, 20]], [[-26, -18], [34, -18], [34, 18], [-26, 18]], 5, 19, 'hull'));
+  // hood rises a touch toward the cabin
+  P.push(frustum([[4, -16], [34, -16], [34, 16], [4, 16]], [[4, -15], [32, -15], [32, 15], [4, 15]], 19, 22, 'hood'));
+  // cabin: sloped windshield and rear window
+  P.push(frustum([[-24, -16], [6, -16], [6, 16], [-24, 16]], [[-19, -13], [-3, -13], [-3, 13], [-19, 13]], 19, 35, 'cabin'));
+  // short flatbed over the treads, with low side rails and a tailgate
+  P.push(box(-60, -26, -19, 19, 13, 17, 'bed'));
+  for (const s of [-1, 1]) P.push(box(-60, -27, s * 19 - (s > 0 ? 2 : 0), s * 19 + (s < 0 ? 2 : 0), 17, 22, 'rail'));
+  P.push(box(-61, -58, -19, 19, 17, 22, 'rail'));
+  // cargo: jerry cans + a lashed crate on the bed
+  P.push(box(-56, -46, -15, -3, 17, 26, 'can'));
+  P.push(box(-56, -46, 1, 13, 17, 26, 'can'));
+  P.push(box(-42, -31, -11, 10, 17, 24, 'crate'));
+  // supercharger blower poking through the hood
+  P.push(box(12, 24, -6, 6, 22, 30, 'blower'));
+  P.push(box(14, 22, -4, 4, 30, 33, 'scoop'));
+  // twin machine guns
+  for (const s of [-1, 1]) P.push(box(10, 44, s * 10.5 - 1.8, s * 10.5 + 1.8, 22, 25.5, 'gun'));
+  // exhaust stacks behind the cab
+  for (const s of [-1, 1]) P.push(box(-28, -23, s * 15 - 2.5, s * 15 + 2.5, 17, 44, 'pipe'));
+  // big railroad cattle-catcher: wide, long, raked wedge
+  P.push(frustum([[34, -31], [52, -19], [64, 0], [52, 19], [34, 31]], [[34, -27], [47, -17], [56, 0], [47, 17], [34, 27]], 1, 21, 'plow'));
+  // long spikes along the catcher's nose
+  for (const y of [-22, -12, -3, 6, 15, 23]) {
+    const bx = 62 - Math.abs(y) * 0.55;
+    P.push(pyramid([[bx, y - 2.5, 7], [bx, y + 2.5, 7], [bx, y + 2.5, 13], [bx, y - 2.5, 13]], [bx + 24, y + Math.sign(y) * 3, 10], 'spike'));
+  }
+  // side spikes
+  for (const x of [-12, 0, 12]) for (const s of [-1, 1]) {
+    const yb = s * 20;
+    P.push(pyramid([[x - 3, yb, 10], [x + 3, yb, 10], [x + 3, yb, 15], [x - 3, yb, 15]].reverse(), [x, yb + s * 13, 12.5], 'spike'));
+  }
+  // rear bumper bar
+  P.push(box(-66, -61, -18, 18, 6, 12, 'bumper'));
+  // fix face winding so every outward normal points away from its part's center
+  for (const p of P) {
+    const c = p.v.reduce((a, v) => [a[0] + v[0] / p.v.length, a[1] + v[1] / p.v.length, a[2] + v[2] / p.v.length], [0, 0, 0]);
+    for (const f of p.faces) {
+      const n = faceNormal(p.v, f.i);
+      const fc = f.i.reduce((a, i) => [a[0] + p.v[i][0] / f.i.length, a[1] + p.v[i][1] / f.i.length, a[2] + p.v[i][2] / f.i.length], [0, 0, 0]);
+      if ((fc[0] - c[0]) * n[0] + (fc[1] - c[1]) * n[1] + (fc[2] - c[2]) * n[2] < 0) f.i.reverse();
+      f.n = faceNormal(p.v, f.i);
+    }
+  }
+  return P;
+}
+function faceNormal(v, idx) {
+  const a = v[idx[0]], b = v[idx[1]], c = v[idx[2]];
+  const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], wx = c[0] - a[0], wy = c[1] - a[1], wz = c[2] - a[2];
+  let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+  const m = Math.hypot(nx, ny, nz) || 1; return [nx / m, ny / m, nz / m];
+}
+const LIGHT = (() => { const l = [-0.5, -0.6, 0.85], m = Math.hypot(...l); return l.map(v => v / m); })();
+function drawCar3D(cx, cy, cz, a, scale) {
+  if (!CAR_MODEL) CAR_MODEL = buildCarModel();
+  const S = scale * 1.05, ca = Math.cos(a), sa = Math.sin(a);
+  // view direction for this oblique projection: screen = (X, Y*K - Z)  ->  towards camera = (0, 1, K)
+  const VY = 1, VZ = K;
+  const faces = [];
+  for (const p of CAR_MODEL) {
+    const wv = p.v.map(([x, y, z]) => [cx + (x * ca - y * sa) * S, cy + (x * sa + y * ca) * S, cz + z * S]);
+    for (const f of p.faces) {
+      const n = [f.n[0] * ca - f.n[1] * sa, f.n[0] * sa + f.n[1] * ca, f.n[2]];
+      if (n[1] * VY + n[2] * VZ <= 0.001) continue;            // back face: hidden
+      const pts = f.i.map(i => wv[i]);
+      const depth = pts.reduce((d, q) => d + q[1] * VY + q[2] * VZ, 0) / pts.length;
+      faces.push({ pts, n, depth, tag: p.tag, k: f.k });
+    }
+  }
+  faces.sort((u, v) => u.depth - v.depth);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  // stipple travels with the car instead of sliding over it
+  const pin = new DOMMatrix().translateSelf(Math.round(cx), Math.round(cy * K - cz)).scaleSelf(1 / 3);
+  for (const p of Object.values(HT)) p.setTransform(pin);
+  for (const f of faces) {
+    ctx.beginPath();
+    f.pts.forEach((q, i) => { const X = q[0], Y = q[1] * K - q[2]; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+    ctx.closePath();
+    const lit = f.n[0] * LIGHT[0] + f.n[1] * LIGHT[1] + f.n[2] * LIGHT[2];
+    const dark = f.tag === 'tire' || f.tag === 'gun' || f.tag === 'spike' || f.tag === 'tread';
+    ctx.fillStyle = dark ? INK : PAPER; ctx.fill();
+    if (!dark) {
+      const shade = f.tag === 'pipe' || f.tag === 'bumper' ? (lit > 0.4 ? HT.mid : HT.dark)
+                  : lit > 0.7 ? null : lit > 0.35 ? HT.light : lit > 0 ? HT.mid : HT.dark;
+      if (shade) { ctx.fillStyle = shade; ctx.fill(); }
+    }
+    ctx.strokeStyle = INK; ctx.lineWidth = dark ? 1 : 1.35; ctx.stroke();
+    // tread grooves across the track faces
+    if (f.tag === 'tread' && f.k === 'side') {
+      const [a, b, c, d] = f.pts, n = Math.max(2, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / 4.5));
+      ctx.strokeStyle = PAPER; ctx.lineWidth = 0.9; ctx.beginPath();
+      for (let t = 1; t < n; t++) { const u = t / n; ctx.moveTo(a[0] + (b[0] - a[0]) * u, (a[1] + (b[1] - a[1]) * u) * K - (a[2] + (b[2] - a[2]) * u)); ctx.lineTo(d[0] + (c[0] - d[0]) * u, (d[1] + (c[1] - d[1]) * u) * K - (d[2] + (c[2] - d[2]) * u)); }
+      ctx.stroke();
+    }
+    // cattle-catcher slats
+    if (f.tag === 'plow' && f.k === 'side') {
+      const [a, b, c, d] = f.pts;
+      ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.beginPath();
+      for (const u of [0.25, 0.5, 0.75]) { ctx.moveTo(a[0] + (b[0] - a[0]) * u, (a[1] + (b[1] - a[1]) * u) * K - (a[2] + (b[2] - a[2]) * u)); ctx.lineTo(d[0] + (c[0] - d[0]) * u, (d[1] + (c[1] - d[1]) * u) * K - (d[2] + (c[2] - d[2]) * u)); }
+      ctx.stroke();
+    }
+    // windows: dark inset on the cabin's sloped sides
+    if (f.tag === 'cabin' && f.k === 'side') {
+      const c = f.pts.reduce((m, q) => [m[0] + q[0] / 4, m[1] + q[1] / 4, m[2] + q[2] / 4], [0, 0, 0]);
+      ctx.beginPath();
+      f.pts.forEach((q, i) => { const X = c[0] + (q[0] - c[0]) * 0.72, Y = (c[1] + (q[1] - c[1]) * 0.72) * K - (c[2] + (q[2] - c[2]) * 0.6); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+      ctx.closePath(); ctx.fillStyle = HT.vdark; ctx.fill(); ctx.lineWidth = 1; ctx.stroke();
+    }
+    // panel seams and rivets on the hull top + hood
+    if ((f.tag === 'hull' || f.tag === 'hood') && f.k === 'top') {
+      const q = f.pts, m = (u, v, t) => [u[0] + (v[0] - u[0]) * t, (u[1] + (v[1] - u[1]) * t) * K - (u[2] + (v[2] - u[2]) * t)];
+      ctx.lineWidth = 0.8; ctx.beginPath();
+      for (const t of [0.33, 0.66]) { const A = m(q[0], q[1], t), B = m(q[3], q[2], t); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); }
+      ctx.stroke();
+      ctx.fillStyle = INK;
+      for (const t of [0.12, 0.88]) for (const u of [0.15, 0.85]) {
+        const A = q[0], B = q[1], C = q[3];
+        const X = A[0] + (B[0] - A[0]) * t + (C[0] - A[0]) * u, Yw = A[1] + (B[1] - A[1]) * t + (C[1] - A[1]) * u, Z = A[2] + (B[2] - A[2]) * t + (C[2] - A[2]) * u;
+        ctx.fillRect(X - 0.8, Yw * K - Z - 0.8, 1.6, 1.6);
+      }
+    }
+  }
+}
+
+// car parts are drawn in car-local space: +x = forward
+function chassis() {
+  ctx.lineWidth = 1.6; ctx.strokeStyle = INK;
+  // wheels
+  for (const [wx, wy] of [[16, -15], [16, 15], [-17, -16], [-17, 16]]) {
+    ctx.beginPath(); ctx.roundRect(wx - 7, wy - 4, 14, 8, 2);
+    ctx.fillStyle = INK; ctx.fill();
+  }
+  // plow / ram on the front
+  ctx.beginPath();
+  ctx.moveTo(30, -19); ctx.lineTo(40, -10); ctx.lineTo(44, 0); ctx.lineTo(40, 10); ctx.lineTo(30, 19); ctx.lineTo(28, 0); ctx.closePath();
+  ctx.fillStyle = PAPER; ctx.fill(); ctx.fillStyle = ST.mid; ctx.fill(); ctx.stroke();
+  // ram spikes
+  ctx.beginPath();
+  for (const s of [-14, -6, 2, 10]) { ctx.moveTo(40 - Math.abs(s) * 0.4, s); ctx.lineTo(52 - Math.abs(s) * 0.5, s + 2); ctx.lineTo(40 - Math.abs(s + 4) * 0.4, s + 4); }
+  ctx.fillStyle = INK; ctx.fill();
+}
+function body() {
+  ctx.lineWidth = 1.8; ctx.strokeStyle = INK;
+  ctx.beginPath(); ctx.roundRect(-28, -14, 60, 28, 6);
+  ctx.fillStyle = PAPER; ctx.fill();
+  ctx.save(); ctx.clip(); ctx.fillStyle = ST.light; ctx.fillRect(-28, 2, 60, 14); ctx.fillStyle = ST.mid; ctx.fillRect(-28, 9, 60, 8); ctx.restore();
+  ctx.stroke();
+  // hood scoop / blower
+  ctx.beginPath(); ctx.roundRect(14, -5, 12, 10, 2); ctx.fillStyle = ST.dark; ctx.fill(); ctx.stroke();
+  // side spikes
+  ctx.fillStyle = INK; ctx.beginPath();
+  for (const sx of [-20, -8, 4]) for (const s of [-1, 1]) { ctx.moveTo(sx, 14 * s); ctx.lineTo(sx + 3, 22 * s); ctx.lineTo(sx + 6, 14 * s); }
+  ctx.fill();
+  // twin guns
+  ctx.fillStyle = INK;
+  ctx.fillRect(20, -12, 16, 3); ctx.fillRect(20, 9, 16, 3);
+  // exhaust stacks at back
+  ctx.beginPath(); ctx.arc(-24, -9, 2.5, 0, 6.283); ctx.arc(-24, 9, 2.5, 0, 6.283); ctx.fill();
+}
+function cabin() {
+  ctx.lineWidth = 1.6; ctx.strokeStyle = INK;
+  ctx.beginPath(); ctx.roundRect(-14, -10, 22, 20, 4);
+  ctx.fillStyle = PAPER; ctx.fill();
+  ctx.save(); ctx.clip(); ctx.fillStyle = ST.light; ctx.fillRect(-14, 3, 22, 8); ctx.restore();
+  ctx.stroke();
+  // windshield
+  ctx.beginPath(); ctx.moveTo(8, -9); ctx.lineTo(4, -7); ctx.lineTo(4, 7); ctx.lineTo(8, 9); ctx.closePath();
+  ctx.fillStyle = ST.vdark; ctx.fill(); ctx.stroke();
+  // roll-cage cross
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-12, -8); ctx.lineTo(2, 8); ctx.moveTo(-12, 8); ctx.lineTo(2, -8); ctx.stroke();
+}
+
+function drawParticles(which) {
+  for (const p of particles) {
+    if ((p.k === 'dust') !== (which === 'dust')) continue;
+    const x = p.x, y = p.y * K - p.z;
+    const t = p.life / p.max;
+    if (p.k === 'smoke') {
+      ctx.globalAlpha = Math.min(1, t * 1.5) * 0.7;
+      ctx.beginPath(); ctx.arc(x + Math.sin(p.life * 3) * 3, y, p.s * (2.6 - t * 1.6), 0, 6.283);
+      ctx.fillStyle = ST.light; ctx.fill(); ctx.globalAlpha = 1;
+    } else if (p.k === 'dust') {
+      ctx.globalAlpha = t * 0.8;
+      ctx.beginPath(); ctx.arc(x, y, p.s * (1.6 - t * 0.6), 0, 6.283);
+      ctx.fillStyle = ST.light; ctx.fill(); ctx.globalAlpha = 1;
+    } else if (p.k === 'chunk') {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot);
+      ctx.fillStyle = PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.roundRect(-p.s / 2, -p.s / 3, p.s, p.s * 0.66, 1.5); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = ST.mid; ctx.fill();
+      ctx.restore();
+    } else if (p.k === 'spark') {
+      ctx.strokeStyle = INK; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - p.vx * 0.02, y - p.vy * 0.02 * K + p.vz * 0.02); ctx.stroke();
+    } else if (p.k === 'shell') {
+      ctx.fillStyle = INK; ctx.fillRect(x - 1, y - 1, 2.5, 2.5);
+    } else if (p.k === 'flash' && IMG.fx_muzzle) {
+      const sa = Math.atan2(Math.sin(p.a) * K, Math.cos(p.a));
+      ctx.save(); ctx.translate(x, y); ctx.rotate(sa);
+      ctx.drawImage(IMG.fx_muzzle, -6, -11, 44, 22); ctx.restore();
+    } else if (p.k === 'flash') {
+      ctx.save(); ctx.translate(x, y); ctx.scale(1, K); ctx.rotate(p.a);
+      ctx.fillStyle = INK;
+      ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(14, 0); ctx.lineTo(0, 4); ctx.lineTo(4, 0); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(6, -7); ctx.lineTo(7, 0); ctx.lineTo(6, 7); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    } else if (p.k === 'boom') {
+      const fr = Math.min(7, Math.floor((1 - t) * 8));
+      if (IMG.fx_boom) {
+        const fw = IMG.fx_boom.width / 8;
+        ctx.drawImage(IMG.fx_boom, fr * fw, 0, fw, IMG.fx_boom.height, x - p.s / 2, y - p.s * 0.78, p.s, p.s);
+      } else {
+        const R = 20 + (1 - t) * 80; ctx.beginPath(); ctx.arc(x, y - R * 0.6, R, 0, 6.283);
+        ctx.globalAlpha = t; ctx.fillStyle = ST.dark; ctx.fill(); ctx.globalAlpha = 1;
+      }
+    } else if (p.k === 'gib') {
+      const sheet = IMG[p.who + '_gibs'];
+      ctx.globalAlpha = Math.min(1, t * 3);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot);
+      if (sheet) ctx.drawImage(sheet, p.f * 32, 0, 32, 32, -p.s * 1.4, -p.s * 1.4, p.s * 2.8, p.s * 2.8);
+      else if (p.who === 'buffalo') { inkLine([[-p.s, 0], [p.s, 0]], 2.4); ctx.beginPath(); ctx.arc(-p.s, 0, 2.5, 0, 6.283); ctx.arc(p.s, 0, 2.5, 0, 6.283); ctx.fillStyle = INK; ctx.fill(); }
+      else { pathPts(wobblyPoly(0, 0, p.s * 0.7, p.s * 0.5, p.f + 11, 7, 0.35)); ctx.fillStyle = PAPER; ctx.fill(); ctx.fillStyle = p.who === 'alien' ? ST.mid : ST.dark; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1.2; ctx.stroke(); }
+      ctx.restore(); ctx.globalAlpha = 1;
+    } else if (p.k === 'drop') {
+      ctx.fillStyle = INK; ctx.globalAlpha = Math.min(1, t * 2);
+      ctx.beginPath(); ctx.ellipse(x, y, p.s, p.z > 0.5 ? p.s : p.s * 0.6, 0, 0, 6.283); ctx.fill(); ctx.globalAlpha = 1;
+    } else if (p.k === 'ember') {
+      ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.globalAlpha = t;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (Math.random() - 0.5) * 3, y - p.s * 2); ctx.stroke(); ctx.globalAlpha = 1;
+    } else if (p.k === 'gibburst') {
+      if (IMG.fx_gib) {
+        const fr = Math.min(5, Math.floor((1 - t) * 6)), fw = IMG.fx_gib.width / 6;
+        ctx.drawImage(IMG.fx_gib, fr * fw, 0, fw, IMG.fx_gib.height, x - p.s / 2, y - p.s / 2, p.s, p.s);
+      } else {
+        const R = p.s * 0.15 + (1 - t) * p.s * 0.35, r = mulberry32(7);
+        ctx.fillStyle = INK; ctx.globalAlpha = t * 1.5;
+        for (let i = 0; i < 16; i++) { const a = r() * 6.283, rr = R * (0.4 + r() * 0.7); ctx.beginPath(); ctx.arc(x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.8, 2 + r() * 4 * t, 0, 6.283); ctx.fill(); }
+        ctx.globalAlpha = 1;
+      }
+    } else if (p.k === 'twig') {
+      ctx.strokeStyle = INK; ctx.lineWidth = 1;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot);
+      ctx.beginPath(); ctx.moveTo(-p.s, 0); ctx.lineTo(p.s, 0); ctx.moveTo(0, 0); ctx.lineTo(p.s * 0.5, -p.s * 0.6); ctx.stroke();
+      ctx.restore();
+    } else if (p.k === 'explode') {
+      if (!IMG.fx_explode) continue;
+      const fr = Math.min(5, Math.floor((1 - t) * 6)), fw = IMG.fx_explode.width / 6;
+      ctx.drawImage(IMG.fx_explode, fr * fw, 0, fw, IMG.fx_explode.height, x - p.s / 2, y - p.s / 2, p.s, p.s);
+    } else if (p.k === 'blast') {
+      if (IMG.fx_explode) continue;
+      const R = 10 + (1 - t) * 40;
+      ctx.strokeStyle = INK; ctx.lineWidth = 2 * t + 0.5;
+      ctx.beginPath();
+      for (let i = 0; i < 12; i++) { const a = i / 12 * 6.283; ctx.moveTo(x + Math.cos(a) * R * 0.5, y + Math.sin(a) * R * 0.5 * K); ctx.lineTo(x + Math.cos(a) * R, y + Math.sin(a) * R * K); }
+      ctx.stroke();
+    }
+  }
+}
+
+function drawVignette() {
+  // stipple vignette at the edges = heat-haze darkness
+  ctx.save();
+  const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.75);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.fillStyle = g; ctx.globalAlpha = 0.18; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+function stamp(text, x, y, size, align = 'center') {
+  ctx.font = `900 ${size}px "Courier New", Courier, monospace`;
+  ctx.textAlign = align; ctx.textBaseline = 'middle';
+  ctx.fillStyle = INK; ctx.fillText(text, x, y);
+}
+function drawHUD() {
+  if (state.mode === 'title') {
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fillRect(0, 0, W, H);
+    const s = Math.min(W / 7, 140);
+    if (IMG.logo) {
+      const lw = Math.min(W * 0.8, 900), lh = lw * IMG.logo.height / IMG.logo.width;
+      ctx.drawImage(IMG.logo, W / 2 - lw / 2, H * 0.34 - lh / 2, lw, lh);
+    } else {
+    ctx.save(); ctx.translate(W / 2, H * 0.4); ctx.rotate(-0.03);
+    ctx.font = `900 ${s}px "Courier New", Courier, monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = ST.dark; ctx.fillText('WASTELAND', 5, 6);
+    ctx.fillStyle = INK; ctx.fillText('WASTELAND', 0, 0);
+    ctx.restore();
+    }
+    stamp('PRESS SPACE TO DRIVE', W / 2, H * 0.58, 22);
+    stamp('W/↑ GAS   S/↓ BRAKE   A D / ← → STEER   SHIFT DRIFT   SPACE GUNS', W / 2, H * 0.66, 14);
+    return;
+  }
+  // world units: speed px/s ÷ 4 = KPH, so 1 km = 4 × 3600 = 14,400 px
+  const meters = stats.dist / PX_PER_KM * 1000;
+  const km = meters < 1000 ? `${Math.floor(meters)} M` : `${(meters / 1000).toFixed(2)} KM`;
+  stamp(`DIST ${km}`, 20, 28, 18, 'left');
+  stamp(`CACTI ${stats.cacti}`, 20, 52, 18, 'left');
+  stamp(`TNT ${stats.tnt}`, 20, 76, 18, 'left');
+  stamp(`KILLS ${stats.kills}`, 20, 100, 18, 'left');
+  const spd = car ? Math.round(Math.hypot(car.vx, car.vy) / PX_PER_KPH) : 0;
+  stamp(`${spd} KPH`, W - 20, 28, 18, 'right');
+  stamp('R RESTART', W - 20, 52, 12, 'right');
+
+  if (state.mode === 'dead') {
+    ctx.fillStyle = INK; ctx.globalAlpha = Math.max(0, Math.min(0.85, (state.deadT - (state.death === 'boom' ? 1.1 : 0)) * 1.5)); ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1;
+    ctx.fillStyle = PAPER;
+    ctx.font = `900 ${Math.min(W / 12, 72)}px "Courier New", monospace`; ctx.textAlign = 'center';
+    if (state.death === 'boom' && state.deadT < 1.1) return;
+    const word = state.death === 'boom' ? IMG[state.word || 'smithereens'] : null;
+    if (word) {
+      let im = word;
+      if (state.word === 'smithereens' || !state.word) {    // black ink art: make a white-ink copy for the dark screen
+        if (!IMG._smithW) {
+          const c = document.createElement('canvas'); c.width = word.width; c.height = word.height;
+          const g = c.getContext('2d'); g.drawImage(word, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = PAPER; g.fillRect(0, 0, c.width, c.height);
+          IMG._smithW = c;
+        }
+        im = IMG._smithW;
+      }
+      let w = Math.min(W * 0.62, 720), h = w * im.height / im.width;
+      const maxH = H * 0.2; if (h > maxH) { w *= maxH / h; h = maxH; }
+      ctx.drawImage(im, W / 2 - w / 2, H * 0.47 - h, w, h);       // sits just above the score line
+    } else ctx.fillText(state.death === 'boom' ? 'BLOWN TO PIECES' : 'SWALLOWED BY THE ABYSS', W / 2, H * 0.42);
+    ctx.font = `700 20px "Courier New", monospace`;
+    ctx.fillText(`${km}  ·  ${stats.cacti} CACTI  ·  ${stats.kills} KILLS`, W / 2, H * 0.52);
+    if (state.deadT > (state.death === 'boom' ? 1.6 : 0.8)) ctx.fillText('PRESS R TO RIDE AGAIN', W / 2, H * 0.6);
+  }
+}
+
+/* ---------- loop ---------- */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.033, (now - last) / 1000); last = now;
+  update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+car = null; bullets = []; particles = []; tracks = []; shake = 0; stats = { dist: 0, cacti: 0, tnt: 0, kills: 0 };
+requestAnimationFrame(frame);
+</script>
+<!-- xgassman back link -->
+<a id="xg-back" href="/" title="More projects at xgassman.com">← xgassman<span style="color:#6f8259">.</span></a>
+<style>
+#xg-back{all:initial;position:fixed!important;left:12px;bottom:12px;z-index:2147483000!important;
+  font:500 12px/1 Arial,Helvetica,sans-serif;letter-spacing:-.2px;color:#eeeeea;cursor:pointer;
+  background:rgba(25,26,24,.78);padding:7px 11px;border-radius:999px;
+  box-shadow:0 1px 4px rgba(0,0,0,.35);opacity:.8;transition:opacity .15s}
+#xg-back:hover,#xg-back:focus-visible{opacity:1}
+#xg-back:focus-visible{outline:2px solid #6f8259;outline-offset:2px}
+@media print{#xg-back{display:none}}
+</style>
+</body>
+</html>

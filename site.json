@@ -19,6 +19,14 @@
       "card": "pope"
     },
     {
+      "file": "wasteland/index.html",
+      "url": "wasteland/",
+      "name": "Wasteland",
+      "description": "A top-down desert driving game. Hit the gas, drift and fire your guns down Route 66, blasting cacti, TNT and zombies without getting blown to pieces or swallowed by the abyss.",
+      "icon": "wasteland",
+      "card": "wasteland"
+    },
+    {
       "file": "cake-land/index.html",
       "url": "cake-land/",
       "name": "Cake Land",
